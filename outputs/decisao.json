@@ -4,6 +4,7 @@
     "days_per_year": 365,
     "min_short_stay_listings": 20,
     "min_sale_listings": 15,
+    "max_typical_asking_price": 1000000,
     "thesis_suburb": "Centro",
     "thesis_profile": "Studio/1Q"
   },

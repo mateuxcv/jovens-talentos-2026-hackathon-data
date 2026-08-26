@@ -82,6 +82,7 @@ class DecisionAssumptions:
     days_per_year: int = 365
     min_short_stay_listings: int = 20
     min_sale_listings: int = 15
+    max_typical_asking_price: float | None = 1_000_000
     thesis_suburb: str = "Centro"
     thesis_profile: str = "Studio/1Q"
 
@@ -92,6 +93,11 @@ class DecisionAssumptions:
             raise ValueError("days_per_year must be positive")
         if self.min_short_stay_listings <= 0 or self.min_sale_listings <= 0:
             raise ValueError("sample gates must be positive")
+        if (
+            self.max_typical_asking_price is not None
+            and self.max_typical_asking_price <= 0
+        ):
+            raise ValueError("max_typical_asking_price must be positive")
 
 
 # Compatibility alias for earlier imports and notebooks.
@@ -412,6 +418,10 @@ def build_decision(
     eligible = metrics.loc[
         metrics["evidence_eligible"] & metrics["gross_yield_scenario"].notna()
     ].copy()
+    if assumptions.max_typical_asking_price is not None:
+        eligible = eligible.loc[
+            eligible["median_asking_price"] <= assumptions.max_typical_asking_price
+        ]
     if eligible.empty:
         raise ValueError("No segment passes the evidence gates")
 
@@ -428,8 +438,13 @@ def build_decision(
         ascending=[False, False, False],
     ).iloc[0]
 
+    thesis_within_budget = bool(
+        assumptions.max_typical_asking_price is None
+        or thesis["median_asking_price"] <= assumptions.max_typical_asking_price
+    )
+    thesis_in_mandate = bool(thesis["evidence_eligible"] and thesis_within_budget)
     thesis_wins = bool(
-        thesis["evidence_eligible"]
+        thesis_in_mandate
         and thesis["gross_yield_scenario"] >= challenger["gross_yield_scenario"]
     )
     winner = thesis if thesis_wins else challenger
@@ -448,6 +463,8 @@ def build_decision(
 
     if not bool(thesis["evidence_eligible"]):
         thesis_verdict = "INCONCLUSIVA"
+    elif not thesis_within_budget:
+        thesis_verdict = "FORA DO MANDATO"
     elif thesis_wins and robust_same_winner is False:
         thesis_verdict = "SUSTENTADA COM RESSALVAS"
     elif thesis_wins:
@@ -467,6 +484,7 @@ def build_decision(
         "winner": winner,
         "runner_up": runner_up,
         "thesis_verdict": thesis_verdict,
+        "thesis_in_mandate": thesis_in_mandate,
         "robust_same_winner": robust_same_winner,
         "robust_evidence_complete": robust_evidence_complete,
         "reversal": reversal,
@@ -586,6 +604,83 @@ def find_minimum_reversal(
     }
 
 
+def evaluate_duel(
+    thesis: pd.Series,
+    challenger: pd.Series,
+    *,
+    thesis_occupancy: float,
+    challenger_occupancy: float,
+    thesis_rate_change: float = 0.0,
+    challenger_rate_change: float = 0.0,
+    thesis_purchase_price: float | None = None,
+    challenger_purchase_price: float | None = None,
+    days_per_year: int = 365,
+) -> dict[str, object]:
+    """Recalculate a two-segment duel under asymmetric user scenarios."""
+
+    for name, value in (
+        ("thesis_occupancy", thesis_occupancy),
+        ("challenger_occupancy", challenger_occupancy),
+    ):
+        if not 0 < value <= 1:
+            raise ValueError(f"{name} must be greater than 0 and at most 1")
+    for name, value in (
+        ("thesis_rate_change", thesis_rate_change),
+        ("challenger_rate_change", challenger_rate_change),
+    ):
+        if value <= -1:
+            raise ValueError(f"{name} must be greater than -1")
+    if days_per_year <= 0:
+        raise ValueError("days_per_year must be positive")
+
+    thesis_price = float(
+        thesis_purchase_price
+        if thesis_purchase_price is not None
+        else thesis["median_asking_price"]
+    )
+    challenger_price = float(
+        challenger_purchase_price
+        if challenger_purchase_price is not None
+        else challenger["median_asking_price"]
+    )
+    if thesis_price <= 0 or challenger_price <= 0:
+        raise ValueError("purchase prices must be positive")
+
+    thesis_rate = float(thesis["observed_median_rate"]) * (1 + thesis_rate_change)
+    challenger_rate = float(challenger["observed_median_rate"]) * (
+        1 + challenger_rate_change
+    )
+    thesis_revenue = thesis_rate * days_per_year * thesis_occupancy
+    challenger_revenue = challenger_rate * days_per_year * challenger_occupancy
+    thesis_yield = thesis_revenue / thesis_price
+    challenger_yield = challenger_revenue / challenger_price
+    if np.isclose(thesis_yield, challenger_yield, rtol=1e-9, atol=1e-12):
+        leader = "EMPATE"
+    elif thesis_yield > challenger_yield:
+        leader = _segment_key(thesis)
+    else:
+        leader = _segment_key(challenger)
+
+    return {
+        "leader": leader,
+        "thesis": {
+            "rate": thesis_rate,
+            "occupancy": thesis_occupancy,
+            "purchase_price": thesis_price,
+            "annualized_gross_revenue": thesis_revenue,
+            "gross_yield": thesis_yield,
+        },
+        "challenger": {
+            "rate": challenger_rate,
+            "occupancy": challenger_occupancy,
+            "purchase_price": challenger_price,
+            "annualized_gross_revenue": challenger_revenue,
+            "gross_yield": challenger_yield,
+        },
+        "yield_gap_percentage_points": abs(thesis_yield - challenger_yield) * 100,
+    }
+
+
 def build_acquisition_shortlist(
     datasets: Mapping[str, pd.DataFrame],
     decision: Mapping[str, object],
@@ -609,12 +704,20 @@ def build_acquisition_shortlist(
         )
         & (sales["sale_price"] <= reversal["winner_max_asking_price"])
     ].copy()
+    if assumptions.max_typical_asking_price is not None:
+        candidates = candidates.loc[
+            candidates["sale_price"] <= assumptions.max_typical_asking_price
+        ].copy()
     if candidates.empty:
         return _empty_shortlist()
 
-    candidates["scenario_gross_revenue"] = float(
-        winner["annualized_gross_revenue_scenario"]
+    scenario_revenue = float(
+        decision.get(
+            "winner_scenario_gross_revenue",
+            winner["annualized_gross_revenue_scenario"],
+        )
     )
+    candidates["scenario_gross_revenue"] = scenario_revenue
     candidates["scenario_gross_yield"] = _safe_divide(
         candidates["scenario_gross_revenue"], candidates["sale_price"]
     )
@@ -712,6 +815,7 @@ def build_decision_data(
         "decision": decision,
         "shortlist": shortlist,
         "audit": build_data_audit(datasets),
+        "datasets": datasets,
     }
 
 

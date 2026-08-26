@@ -11,6 +11,7 @@ from src.engine import (
     DecisionAssumptions,
     build_decision,
     build_decision_data,
+    evaluate_duel,
     load_datasets,
     prepare_sale_listings,
     prepare_short_stay_listings,
@@ -88,6 +89,25 @@ class EngineIntegrationTests(unittest.TestCase):
         self.assertEqual(
             {"ELEGÍVEL PARA DILIGÊNCIA"}, set(shortlist["diligence_status"])
         )
+
+    def test_asymmetric_scenario_can_change_the_leader(self) -> None:
+        decision = self.result["decision"]
+        duel = evaluate_duel(
+            decision["thesis"],
+            decision["challenger"],
+            thesis_occupancy=0.625,
+            challenger_occupancy=0.625,
+            challenger_rate_change=-0.20,
+        )
+        self.assertEqual("Centro · Studio/1Q", duel["leader"])
+
+    def test_budget_can_remove_the_thesis_from_the_mandate(self) -> None:
+        result = build_decision_data(
+            ROOT / "data",
+            DecisionAssumptions(max_typical_asking_price=800_000),
+        )
+        self.assertEqual("FORA DO MANDATO", result["decision"]["thesis_verdict"])
+        self.assertEqual("Morretes", result["decision"]["winner"]["suburb"])
 
 
 class DecisionRuleTests(unittest.TestCase):

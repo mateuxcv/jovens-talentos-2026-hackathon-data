@@ -8,7 +8,12 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from src.engine import DecisionAssumptions, build_decision_data
+from src.engine import (
+    DecisionAssumptions,
+    build_acquisition_shortlist,
+    build_decision_data,
+    evaluate_duel,
+)
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -99,7 +104,6 @@ def _inject_styles() -> None:
             --line: #d6dcda;
             --lime: #c8f25c;
             --teal: #0c7569;
-            --teal-soft: #dff1ec;
             --red: #c74735;
             --red-soft: #f8e5e1;
             --amber: #9a6912;
@@ -162,17 +166,6 @@ def _inject_styles() -> None:
         .stButton > button { width:100%; min-height:54px; border-radius:3px; border:1px solid var(--ink); background:var(--surface); color:var(--ink); font:700 .76rem "IBM Plex Mono",monospace; letter-spacing:.05em; }
         .stButton > button:hover { background:var(--ink); color:var(--lime); border-color:var(--ink); }
 
-        .break-result { background:var(--ink); color:#fff; padding:clamp(26px,5vw,48px); border-left:7px solid var(--lime); }
-        .break-kicker { color:var(--lime); font:600 .7rem "IBM Plex Mono",monospace; letter-spacing:.1em; text-transform:uppercase; }
-        .break-grid { display:grid; grid-template-columns:minmax(220px,.8fr) minmax(300px,1.4fr); gap:46px; align-items:end; margin-top:18px; }
-        .break-number { color:#fff; font:600 clamp(3rem,8vw,6.5rem) "IBM Plex Mono",monospace; line-height:.9; }
-        .break-copy h3 { color:#fff; font-size:1.55rem; margin:0 0 10px; }
-        .break-copy p { color:#aebcb8; margin:0; }
-        .break-details { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#374341; margin-top:30px; }
-        .break-cell { background:#1a2525; padding:18px; }
-        .break-cell span { display:block; color:#91a09c; font-size:.72rem; }
-        .break-cell strong { display:block; color:#fff; font:600 .9rem "IBM Plex Mono",monospace; margin-top:6px; }
-
         .evidence-ledger { background:var(--surface); border:1px solid var(--line); }
         .evidence-row { display:grid; grid-template-columns:82px minmax(150px,.7fr) minmax(260px,1.4fr) minmax(170px,.7fr); gap:18px; align-items:center; padding:19px 20px; border-bottom:1px solid var(--line); }
         .evidence-row:last-child { border-bottom:0; }
@@ -192,24 +185,29 @@ def _inject_styles() -> None:
         .state-open { background:var(--red-soft); color:var(--red); }
         .state-partial { background:var(--amber-soft); color:var(--amber); }
 
-        .approval-bar { display:grid; grid-template-columns:minmax(230px,.8fr) minmax(320px,1.4fr); background:var(--teal); color:#fff; margin-top:16px; }
-        .approval-status { padding:28px; border-right:1px solid rgba(255,255,255,.2); }
-        .approval-status span { color:#aee0d5; font:600 .68rem "IBM Plex Mono",monospace; text-transform:uppercase; }
-        .approval-status strong { display:block; color:#fff; font-size:1.45rem; margin-top:9px; }
-        .approval-next { padding:28px; color:#d8efea; }
-        .approval-next strong { display:block; color:#fff; margin-bottom:6px; }
+        .mandate-shell { max-width:860px; margin:44px auto 26px; }
+        .mandate-label { color:var(--teal); font:600 .72rem "IBM Plex Mono",monospace; text-transform:uppercase; letter-spacing:.1em; }
+        .mandate-shell h1 { font-size:clamp(2.5rem,6vw,5rem); line-height:.95; margin:15px 0; }
+        .mandate-shell p { color:var(--muted); font-size:1.05rem; max-width:680px; }
+        .mandate-rule { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin:28px 0; }
+        .mandate-rule div { background:var(--surface); padding:17px; }
+        .mandate-rule span { display:block; color:var(--muted); font-size:.7rem; }
+        .mandate-rule strong { display:block; margin-top:5px; font-size:.86rem; }
 
-        .deal-queue { background:var(--surface); border:1px solid var(--line); }
-        .deal-row { display:grid; grid-template-columns:54px minmax(260px,1.4fr) 120px 120px minmax(190px,.8fr); gap:18px; align-items:center; padding:19px 20px; border-bottom:1px solid var(--line); }
-        .deal-row:last-child { border-bottom:0; }
-        .deal-rank { color:var(--teal); font:600 .7rem "IBM Plex Mono",monospace; }
-        .deal-name { font-weight:700; font-size:.88rem; }
-        .deal-name small { display:block; color:var(--muted); font-weight:400; margin-top:4px; }
-        .deal-metric span { display:block; color:var(--muted); font-size:.68rem; }
-        .deal-metric strong { font:600 .83rem "IBM Plex Mono",monospace; }
-        .deal-flags { color:var(--red); font-size:.72rem; }
-        .deal-link { display:inline-block; color:var(--ink) !important; text-decoration:none; border:1px solid var(--ink); padding:9px 11px; margin-top:9px; font:600 .65rem "IBM Plex Mono",monospace; text-transform:uppercase; }
+        .lab-status { display:flex; justify-content:space-between; gap:18px; align-items:center; background:var(--ink); color:#fff; padding:18px 20px; margin-bottom:14px; }
+        .lab-status span { color:#9bacaa; font-size:.74rem; }
+        .lab-status strong { color:var(--lime); font:600 1rem "IBM Plex Mono",monospace; }
+        .lab-card { background:var(--surface); border:1px solid var(--line); padding:20px; }
+        .lab-card h4 { margin:0 0 4px; font-size:1.05rem; }
+        .lab-card p { color:var(--muted); font-size:.78rem; margin-bottom:16px; }
+        .lab-result { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); margin-top:14px; border:1px solid var(--line); }
+        .lab-result div { background:var(--surface); padding:15px; }
+        .lab-result span { display:block; color:var(--muted); font-size:.68rem; }
+        .lab-result strong { display:block; margin-top:5px; font:600 .9rem "IBM Plex Mono",monospace; }
 
+        .candidate-focus { background:var(--surface); border:2px solid var(--teal); padding:24px; margin-top:14px; }
+        .candidate-focus h3 { font-size:1.35rem; margin:8px 0; }
+        .candidate-focus p { color:var(--muted); font-size:.86rem; }
         .footnote { color:var(--muted); font-size:.76rem; border-top:1px solid var(--line); padding-top:18px; margin-top:42px; }
         div[data-testid="stExpander"] { background:var(--surface); border-color:var(--line); border-radius:3px; }
 
@@ -217,13 +215,12 @@ def _inject_styles() -> None:
             .block-container { padding-left:1rem; padding-right:1rem; }
             .topbar { align-items:flex-start; flex-direction:column; }
             .topbar-meta { flex-direction:column; gap:4px; }
-            .decision-command, .break-grid, .approval-bar { grid-template-columns:1fr; }
+            .decision-command { grid-template-columns:1fr; }
             .compare-head, .compare-row { grid-template-columns:1fr 1fr; }
             .compare-head span:first-child, .compare-row span:first-child { grid-column:1/-1; }
             .evidence-row, .gate-row, .deal-row { grid-template-columns:1fr; gap:7px; }
             .evidence-result { text-align:left; }
-            .break-details { grid-template-columns:1fr; }
-            .approval-status { border-right:0; border-bottom:1px solid rgba(255,255,255,.2); }
+            .mandate-rule, .lab-result { grid-template-columns:1fr; }
         }
         </style>
         """
@@ -231,9 +228,20 @@ def _inject_styles() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def _build_case(occupancy_rate: float) -> dict[str, object]:
+def _build_case(
+    occupancy_rate: float,
+    max_typical_asking_price: float,
+    min_short_stay_listings: int,
+    min_sale_listings: int,
+) -> dict[str, object]:
     return build_decision_data(
-        DATA_DIR, DecisionAssumptions(occupancy_rate=occupancy_rate)
+        DATA_DIR,
+        DecisionAssumptions(
+            occupancy_rate=occupancy_rate,
+            max_typical_asking_price=max_typical_asking_price,
+            min_short_stay_listings=min_short_stay_listings,
+            min_sale_listings=min_sale_listings,
+        ),
     )
 
 
@@ -303,285 +311,554 @@ def _gate(
     """
 
 
+def _set_widget_value(key: str, value: float) -> None:
+    st.session_state[key] = value
+    st.session_state.pop("approved_candidate", None)
+
+
+def _invalidate_approval() -> None:
+    st.session_state.pop("approved_candidate", None)
+
+
+def _reset_mandate() -> None:
+    for key in list(st.session_state):
+        if key.startswith(("scenario_", "mandate_")):
+            del st.session_state[key]
+    st.session_state["analysis_ready"] = False
+
+
+def _decision_memo(
+    selected: pd.Series,
+    leader_name: str,
+    price_limit: float,
+    budget: float,
+    evidence_policy: str,
+    duel: dict[str, object],
+) -> str:
+    return f"""# Registro de decisão · Itapema
+
+## Decisão
+
+Avançar o imóvel `{selected['listing_id']}` para diligência. Esta decisão não é
+uma autorização de compra.
+
+## Estratégia selecionada
+
+- Perfil: {leader_name}
+- Preço pedido do imóvel: {_money(selected['sale_price'])}
+- Área útil: {selected['usable_area']:.0f} m²
+- Receita bruta anualizada no cenário: {_money(selected['scenario_gross_revenue'])}
+- Retorno bruto do imóvel no cenário: {_percent(selected['scenario_gross_yield'])}
+- Preço comparativo máximo: {_money(price_limit)}
+- Orçamento máximo do mandato: {_money(budget)}
+- Política de evidência: {evidence_policy}
+
+## Cenário aprovado
+
+| Premissa | Tese interna | Desafiante |
+|---|---:|---:|
+| Ocupação | {_percent(duel['thesis']['occupancy'])} | {_percent(duel['challenger']['occupancy'])} |
+| Tarifa no cenário | {_money(duel['thesis']['rate'])} | {_money(duel['challenger']['rate'])} |
+| Preço comparativo | {_money(duel['thesis']['purchase_price'])} | {_money(duel['challenger']['purchase_price'])} |
+| Retorno bruto | {_percent(duel['thesis']['gross_yield'])} | {_percent(duel['challenger']['gross_yield'])} |
+
+## Gates pendentes
+
+1. Validar ocupação e tarifa com histórico operacional comparável.
+2. Confirmar disponibilidade e preço negociável.
+3. Confirmar permissão condominial para short stay.
+4. Validar estágio, custos recorrentes, mobiliário e condição do imóvel.
+
+## Fonte
+
+Anúncio VivaReal: {selected['link_url']}
+
+Gerado por regras determinísticas. Valores anunciados e premissas não equivalem
+a desempenho realizado.
+"""
+
+
 def main() -> None:
     _inject_styles()
+    st.html(
+        '<div class="topbar"><div class="topbar-brand"><span class="topbar-mark"></span><span>Seazone Investment OS</span></div><div class="topbar-meta"><span>DECISÃO ITA-001</span><span>DADOS JAN/2025</span></div></div>'
+    )
 
-    with st.sidebar:
-        st.markdown("## Cenário")
-        st.caption("Premissas alteram o cenário, nunca os dados observados.")
-        occupancy = st.slider(
-            "Ocupação anual comum",
-            min_value=30.0,
-            max_value=85.0,
-            value=62.5,
-            step=2.5,
-            format="%.1f%%",
+    if not st.session_state.get("analysis_ready", False):
+        st.html(
+            """
+            <div class="mandate-shell">
+              <div class="mandate-label">Novo mandato de aquisição</div>
+              <h1>Qual decisão precisa caber no capital?</h1>
+              <p>Defina os limites antes de ver o resultado. O motor confrontará a tese interna com todas as alternativas que passarem pelo mesmo contrato.</p>
+              <div class="mandate-rule">
+                <div><span>Objetivo</span><strong>Eficiência do capital</strong></div>
+                <div><span>Mercado</span><strong>Itapema · apartamentos</strong></div>
+                <div><span>Saída</span><strong>Buy Box + diligência</strong></div>
+              </div>
+            </div>
+            """
         )
-        st.divider()
-        st.markdown("**Corte de evidência**")
-        st.caption("20 anúncios precificados + 15 ofertas de venda por segmento")
-        st.markdown("**Escopo**")
-        st.caption("Apartamentos · Itapema · snapshot jan/2025")
+        with st.form("mandate_form"):
+            budget = st.number_input(
+                "Capital máximo por imóvel",
+                min_value=800_000,
+                max_value=3_000_000,
+                value=1_000_000,
+                step=50_000,
+                format="%d",
+            )
+            occupancy = st.slider(
+                "Ocupação anual para o cenário inicial",
+                min_value=30.0,
+                max_value=85.0,
+                value=62.5,
+                step=2.5,
+                format="%.1f%%",
+            )
+            evidence_policy = st.radio(
+                "Política de evidência",
+                options=["Padrão", "Conservadora"],
+                horizontal=True,
+                help="Conservadora exige 40 anúncios de short stay e 30 ofertas de venda por segmento.",
+            )
+            submitted = st.form_submit_button(
+                "ANALISAR OPORTUNIDADES", width="stretch"
+            )
+        if not submitted:
+            st.stop()
+        st.session_state["mandate_budget"] = float(budget)
+        st.session_state["mandate_occupancy"] = float(occupancy)
+        st.session_state["mandate_policy"] = evidence_policy
+        st.session_state["analysis_ready"] = True
+        st.rerun()
+
+    budget = float(st.session_state["mandate_budget"])
+    base_occupancy = float(st.session_state["mandate_occupancy"]) / 100
+    conservative = st.session_state["mandate_policy"] == "Conservadora"
+    min_short_stay = 40 if conservative else 20
+    min_sales = 30 if conservative else 15
+    assumptions = DecisionAssumptions(
+        occupancy_rate=base_occupancy,
+        max_typical_asking_price=budget,
+        min_short_stay_listings=min_short_stay,
+        min_sale_listings=min_sales,
+    )
 
     try:
-        case = _build_case(occupancy / 100)
+        case = _build_case(base_occupancy, budget, min_short_stay, min_sales)
     except (FileNotFoundError, ValueError) as exc:
-        st.error(f"Não foi possível construir a decisão: {exc}")
+        st.error(f"O mandato não encontrou alternativas comparáveis: {exc}")
+        if st.button("REDEFINIR MANDATO"):
+            _reset_mandate()
+            st.rerun()
         st.stop()
 
     decision = case["decision"]
     thesis = decision["thesis"]
     challenger = decision["challenger"]
-    winner = decision["winner"]
-    reversal = decision["reversal"]
-    shortlist = case["shortlist"]
-    audit = case["audit"]
-    robustness = case["robustness"]
-
-    winner_name = _segment_name(winner)
     thesis_name = _segment_name(thesis)
     challenger_name = _segment_name(challenger)
-    yield_gap = abs(
-        float(challenger["gross_yield_scenario"] - thesis["gross_yield_scenario"])
+    scenario_signature = f"{budget}:{min_short_stay}:{challenger_name}"
+    if st.session_state.get("scenario_signature") != scenario_signature:
+        st.session_state["scenario_signature"] = scenario_signature
+        st.session_state["scenario_thesis_occupancy"] = base_occupancy * 100
+        st.session_state["scenario_challenger_occupancy"] = base_occupancy * 100
+        st.session_state["scenario_thesis_rate"] = 0.0
+        st.session_state["scenario_challenger_rate"] = 0.0
+        st.session_state["scenario_thesis_price"] = float(
+            thesis["median_asking_price"]
+        )
+        st.session_state["scenario_challenger_price"] = float(
+            challenger["median_asking_price"]
+        )
+        st.session_state["rejected_candidates"] = []
+        st.session_state.pop("approved_candidate", None)
+
+    duel = evaluate_duel(
+        thesis,
+        challenger,
+        thesis_occupancy=st.session_state["scenario_thesis_occupancy"] / 100,
+        challenger_occupancy=st.session_state["scenario_challenger_occupancy"] / 100,
+        thesis_rate_change=st.session_state["scenario_thesis_rate"] / 100,
+        challenger_rate_change=st.session_state["scenario_challenger_rate"] / 100,
+        thesis_purchase_price=st.session_state["scenario_thesis_price"],
+        challenger_purchase_price=st.session_state["scenario_challenger_price"],
     )
-    capital_gap = float(thesis["median_asking_price"] - winner["median_asking_price"])
-    revenue_gap = float(
-        winner["annualized_gross_revenue_scenario"]
-        - thesis["annualized_gross_revenue_scenario"]
+    economic_tie = duel["leader"] == "EMPATE"
+    thesis_allowed = bool(thesis["evidence_eligible"]) and (
+        duel["thesis"]["purchase_price"] <= budget
     )
-    lead = shortlist.iloc[0] if not shortlist.empty else None
+    challenger_allowed = bool(challenger["evidence_eligible"]) and (
+        duel["challenger"]["purchase_price"] <= budget
+    )
+    if economic_tie and thesis_allowed and challenger_allowed:
+        scenario_winner = challenger
+        winner_side, runner_side = "challenger", "thesis"
+        operational_blocked = True
+    elif duel["leader"] == thesis_name and thesis_allowed:
+        scenario_winner = thesis
+        winner_side, runner_side = "thesis", "challenger"
+        operational_blocked = False
+    elif challenger_allowed:
+        scenario_winner = challenger
+        winner_side, runner_side = "challenger", "thesis"
+        operational_blocked = False
+    elif thesis_allowed:
+        scenario_winner = thesis
+        winner_side, runner_side = "thesis", "challenger"
+        operational_blocked = False
+    else:
+        scenario_winner = challenger
+        winner_side, runner_side = "challenger", "thesis"
+        operational_blocked = True
+    winner_name = _segment_name(scenario_winner)
+    winner_scenario = duel[winner_side]
+    runner_scenario = duel[runner_side]
+    price_limit = (
+        winner_scenario["annualized_gross_revenue"] / runner_scenario["gross_yield"]
+    )
+    effective_price_limit = min(price_limit, budget)
+    scenario_decision = {
+        "winner": scenario_winner,
+        "winner_scenario_gross_revenue": winner_scenario[
+            "annualized_gross_revenue"
+        ],
+        "reversal": {"winner_max_asking_price": effective_price_limit},
+    }
+    shortlist = build_acquisition_shortlist(
+        case["datasets"], scenario_decision, assumptions
+    )
+    rejected = set(st.session_state.get("rejected_candidates", []))
+    available_shortlist = shortlist.loc[~shortlist["listing_id"].isin(rejected)]
+    if operational_blocked:
+        available_shortlist = available_shortlist.iloc[0:0]
+    lead = available_shortlist.iloc[0] if not available_shortlist.empty else None
     lead_action = (
-        f'<a class="command-cta" href="{escape(str(lead["link_url"]))}" target="_blank">Abrir candidato #1</a>'
+        '<a class="command-cta" href="#queue">Revisar candidato #1</a>'
         if lead is not None
         else ""
     )
+    capital_gap = abs(
+        float(
+            duel["thesis"]["purchase_price"]
+            - duel["challenger"]["purchase_price"]
+        )
+    )
 
+    with st.sidebar:
+        st.markdown("## Mandato ativo")
+        st.metric("Capital máximo", _money(budget))
+        st.metric("Ocupação inicial", _percent(base_occupancy))
+        st.caption(f"Política de evidência: {st.session_state['mandate_policy']}")
+        if st.button("REDEFINIR MANDATO", key="reset_mandate"):
+            _reset_mandate()
+            st.rerun()
+
+    if not thesis_allowed and not challenger_allowed:
+        leader_copy = "Nenhuma estratégia cabe no mandato atual."
+    elif duel["leader"] == thesis_name and not thesis_allowed:
+        leader_copy = (
+            f"{thesis_name} lidera economicamente, mas está fora do mandato."
+        )
+    elif duel["leader"] == challenger_name and not challenger_allowed:
+        leader_copy = (
+            f"{challenger_name} lidera economicamente, mas está fora do mandato."
+        )
+    elif economic_tie:
+        leader_copy = (
+            "O cenário está empatado. Negocie preço ou valide operação antes de escolher."
+        )
+    else:
+        leader_copy = f"{winner_name} lidera nas premissas atuais."
+    eligible_return = (
+        "n/d"
+        if not thesis_allowed and not challenger_allowed
+        else _percent(winner_scenario["gross_yield"])
+    )
     st.html(
         f"""
-        <div class="topbar">
-          <div class="topbar-brand"><span class="topbar-mark"></span><span>Seazone Investment OS</span></div>
-          <div class="topbar-meta"><span>CASE ITA-001</span><span>DATA JAN/2025</span><span>CENÁRIO {_percent(occupancy / 100)}</span></div>
-        </div>
         <div class="decision-command">
           <div class="command-main">
-            <div class="command-label">Próxima ação recomendada</div>
-            <h1>Avançar {escape(winner_name)} para diligência.</h1>
-            <p>Não é autorização de compra. É a rota com melhor eficiência de capital no cenário atual, sujeita aos gates operacionais abaixo.</p>
-            <div class="command-actions">{lead_action}<a class="command-cta secondary" href="#downside">Testar downside primeiro</a></div>
-            <div class="command-proof">Evidência limitada · valores anunciados · ocupação assumida</div>
+            <div class="command-label">Decisão recalculada em tempo real</div>
+            <h1>{escape(leader_copy)}</h1>
+            <p>O resultado responde ao mandato e ao laboratório de cenários. Nenhuma alteração abaixo modifica os dados observados.</p>
+            <div class="command-actions">{lead_action}<a class="command-cta secondary" href="#lab">Abrir laboratório</a></div>
+            <div class="command-proof">Evidência {escape(str(decision['evidence_strength']).lower())} · valores anunciados · cenário explícito</div>
           </div>
           <div class="command-value">
-            <div class="value-row"><span>Capital pedido mediano menor</span><strong class="positive">{_money(capital_gap, True)}</strong></div>
-            <div class="value-row"><span>Vantagem de retorno bruto de cenário</span><strong>+{str(round(yield_gap * 100, 1)).replace('.', ',')} p.p.</strong></div>
-            <div class="value-row"><span>Walk-away price do segmento</span><strong>{_money(reversal['winner_max_asking_price'], True)}</strong></div>
+            <div class="value-row"><span>Retorno da estratégia elegível</span><strong class="positive">{eligible_return}</strong></div>
+            <div class="value-row"><span>Vantagem atual</span><strong>{str(round(duel['yield_gap_percentage_points'], 1)).replace('.', ',')} p.p.</strong></div>
+            <div class="value-row"><span>Capital máximo do mandato</span><strong>{_money(budget, True)}</strong></div>
           </div>
         </div>
         """
     )
 
-    _stage("01", "Decisão em confronto", "A hipótese interna não recebe tratamento preferencial")
+    _stage("01", "Confronto atual", "O placar muda quando suas premissas mudam")
     st.html(
         f"""
         <div class="compare-shell">
-          <div class="compare-head"><span>Métrica de decisão</span><span>Hipótese · {escape(thesis_name)}</span><span class="selected">Selecionado · {escape(challenger_name)}</span></div>
-          <div class="compare-row"><span>Tarifa típica anunciada</span><strong>{_money(thesis['observed_median_rate'])}</strong><strong class="lead">{_money(challenger['observed_median_rate'])}</strong></div>
-          <div class="compare-row"><span>Preço pedido típico</span><strong>{_money(thesis['median_asking_price'], True)}</strong><strong class="lead">{_money(challenger['median_asking_price'], True)}</strong></div>
-          <div class="compare-row"><span>Receita bruta anualizada</span><strong>{_money(thesis['annualized_gross_revenue_scenario'])}</strong><strong class="lead">{_money(challenger['annualized_gross_revenue_scenario'])}</strong></div>
-          <div class="compare-row"><span>Retorno bruto de cenário</span><strong>{_percent(thesis['gross_yield_scenario'])}</strong><strong class="lead">{_percent(challenger['gross_yield_scenario'])}</strong></div>
-          <div class="compare-row"><span>Evidência short stay + venda</span><strong>{int(thesis['short_stay_listings'])} + {int(thesis['sale_listings'])}</strong><strong>{int(challenger['short_stay_listings'])} + {int(challenger['sale_listings'])}</strong></div>
+          <div class="compare-head"><span>Métrica</span><span>Hipótese · {escape(thesis_name)}</span><span>Desafiante · {escape(challenger_name)}</span></div>
+          <div class="compare-row"><span>Tarifa no cenário</span><strong>{_money(duel['thesis']['rate'])}</strong><strong>{_money(duel['challenger']['rate'])}</strong></div>
+          <div class="compare-row"><span>Ocupação assumida</span><strong>{_percent(duel['thesis']['occupancy'])}</strong><strong>{_percent(duel['challenger']['occupancy'])}</strong></div>
+          <div class="compare-row"><span>Preço de aquisição</span><strong>{_money(duel['thesis']['purchase_price'], True)}</strong><strong>{_money(duel['challenger']['purchase_price'], True)}</strong></div>
+          <div class="compare-row"><span>Receita bruta anualizada</span><strong>{_money(duel['thesis']['annualized_gross_revenue'])}</strong><strong>{_money(duel['challenger']['annualized_gross_revenue'])}</strong></div>
+          <div class="compare-row"><span>Retorno bruto</span><strong>{_percent(duel['thesis']['gross_yield'])}</strong><strong>{_percent(duel['challenger']['gross_yield'])}</strong></div>
         </div>
-        <div class="action-prompt"><strong>Por que agir:</strong> o desafiante exige {_money(abs(capital_gap), True)} menos capital pedido mediano e projeta {_money(max(revenue_gap, 0))} a mais sob a ocupação assumida. Antes de avançar, tente destruir essa vantagem.</div>
+        <div class="action-prompt"><strong>Leitura:</strong> diferença de {str(round(duel['yield_gap_percentage_points'], 1)).replace('.', ',')} p.p. e {_money(capital_gap, True)} entre os preços usados no cenário.</div>
         """
     )
 
-    st.html('<div id="downside"></div>')
-    if st.button("EXECUTAR DOWNSIDE TEST"):
-        st.session_state["reveal_attack"] = True
-
-    if st.session_state.get("reveal_attack", False):
-        minimum = reversal["minimum_attack"]
-        st.html(
-            f"""
-            <div class="break-result">
-              <div class="break-kicker">Menor choque que elimina a liderança</div>
-              <div class="break-grid">
-                <div class="break-number">{_percent(abs(minimum['display_change']))}</div>
-                <div class="break-copy"><h3>queda na tarifa típica de {escape(reversal['winner'])}</h3><p>Este é o ponto de empate com {escape(reversal['runner_up'])}. A recomendação é sensível o bastante para exigir validação operacional antes de comprometer capital.</p></div>
-              </div>
-              <div class="break-details">
-                <div class="break-cell"><span>Ocupação no empate</span><strong>{_percent(reversal['winner_occupancy_at_tie'])}</strong></div>
-                <div class="break-cell"><span>Queda de ocupação</span><strong>{str(round(reversal['occupancy_drop_percentage_points'], 1)).replace('.', ',')} p.p.</strong></div>
-                <div class="break-cell"><span>Preço pedido limite</span><strong>{_money(reversal['winner_max_asking_price'], True)}</strong></div>
-              </div>
-            </div>
-            """
+    st.html('<div id="lab"></div>')
+    _stage("02", "Laboratório de cenário", "Tente fazer a recomendação perder")
+    left, right = st.columns(2, gap="medium")
+    with left:
+        st.markdown(f"#### Hipótese: {thesis_name}")
+        st.slider(
+            "Ocupação da hipótese",
+            30.0,
+            90.0,
+            step=1.0,
+            key="scenario_thesis_occupancy",
+            on_change=_invalidate_approval,
+        )
+        st.slider(
+            "Choque na tarifa da hipótese",
+            -30.0,
+            30.0,
+            step=1.0,
+            format="%.0f%%",
+            key="scenario_thesis_rate",
+            on_change=_invalidate_approval,
+        )
+        st.number_input(
+            "Preço da hipótese",
+            min_value=100_000.0,
+            max_value=3_000_000.0,
+            step=25_000.0,
+            key="scenario_thesis_price",
+            on_change=_invalidate_approval,
+        )
+    with right:
+        st.markdown(f"#### Desafiante: {challenger_name}")
+        st.slider(
+            "Ocupação do desafiante",
+            30.0,
+            90.0,
+            step=1.0,
+            key="scenario_challenger_occupancy",
+            on_change=_invalidate_approval,
+        )
+        st.slider(
+            "Choque na tarifa do desafiante",
+            -30.0,
+            30.0,
+            step=1.0,
+            format="%.0f%%",
+            key="scenario_challenger_rate",
+            on_change=_invalidate_approval,
+        )
+        st.number_input(
+            "Preço do desafiante",
+            min_value=100_000.0,
+            max_value=3_000_000.0,
+            step=25_000.0,
+            key="scenario_challenger_price",
+            on_change=_invalidate_approval,
         )
 
-    _stage("02", "Trilha de evidências", "Promessa proporcional à prova disponível")
+    if duel["leader"] == thesis_name:
+        shock_side, shock_runner_side = "thesis", "challenger"
+    else:
+        shock_side, shock_runner_side = "challenger", "thesis"
+    current_winner_yield = float(duel[shock_side]["gross_yield"])
+    current_runner_yield = float(duel[shock_runner_side]["gross_yield"])
+    relative_shock = current_runner_yield / current_winner_yield - 1
+    shock_key = f"scenario_{shock_side}_rate"
+    current_rate_change = float(st.session_state[shock_key]) / 100
+    new_rate_change = ((1 + current_rate_change) * (1 + relative_shock) - 1) * 100
+    if st.button(
+        "APLICAR MENOR CHOQUE AO VENCEDOR",
+        on_click=_set_widget_value,
+        args=(shock_key, new_rate_change),
+        disabled=not -30 <= new_rate_change <= 30,
+    ):
+        pass
+    if not -30 <= new_rate_change <= 30:
+        st.caption(
+            "O empate exige um choque fora do intervalo operacional de ±30% deste laboratório."
+        )
+    st.html(
+        f"""
+        <div class="lab-result">
+          <div><span>Líder atual</span><strong>{escape(str(duel['leader']))}</strong></div>
+          <div><span>Menor choque de tarifa</span><strong>{str(round(abs(relative_shock) * 100, 1)).replace('.', ',')}%</strong></div>
+          <div><span>Preço limite efetivo</span><strong>{_money(effective_price_limit, True)}</strong></div>
+        </div>
+        """
+    )
+
+    _stage("03", "Evidência verificável", "Síntese na frente, fontes sob demanda")
+    audit = case["audit"]
+    robustness = case["robustness"]
     evidence_html = "".join(
         [
             _evidence(
                 "EV-01",
                 "Tarifa anunciada",
-                f"Mediana por listing após deduplicar data de estadia. Janela {audit['stay_date_min']:%d/%m} a {audit['stay_date_max']:%d/%m/%Y}.",
+                f"Mediana por listing; janela {audit['stay_date_min']:%d/%m} a {audit['stay_date_max']:%d/%m/%Y}.",
                 f"{_money(thesis['observed_median_rate'])} → {_money(challenger['observed_median_rate'])}",
                 "observado · Price_AV",
             ),
             _evidence(
                 "EV-02",
-                "Capital de entrada",
-                "Preço pedido mediano após filtros de plausibilidade e republicações prováveis.",
+                "Preço pedido",
+                "Mediana após filtros de plausibilidade e republicações prováveis.",
                 f"{_money(thesis['median_asking_price'], True)} → {_money(challenger['median_asking_price'], True)}",
                 "observado · VivaReal",
             ),
             _evidence(
                 "EV-03",
-                "Retorno comparável",
-                f"Tarifa × 365 × {_percent(occupancy / 100)} de ocupação comum ÷ preço pedido. Não é receita realizada.",
-                f"{_percent(thesis['gross_yield_scenario'])} → {_percent(challenger['gross_yield_scenario'])}",
-                "cálculo + premissa",
-            ),
-            _evidence(
-                "EV-04",
-                "Estabilidade",
-                "Captura inicial, captura final e regra alternativa de republicação mantêm o vencedor; conflito de bairro torna um teste inelegível.",
-                f"{int((robustness['winner'] == winner_name).sum())}/{int(robustness['pair_eligible'].sum())} elegíveis",
-                "stress test de dados",
+                "Cobertura",
+                "Percentual dos apartamentos do perfil que possuem tarifa vinculável.",
+                f"{_percent(thesis['price_coverage'])} → {_percent(challenger['price_coverage'])}",
+                "qualidade da evidência",
             ),
         ]
     )
     st.html(f'<div class="evidence-ledger">{evidence_html}</div>')
 
-    _stage("03", "Dados originais", "Veja a fonte antes de aceitar a síntese")
-    source_name = st.selectbox(
-        "Escolha uma base para consultar",
-        options=list(SOURCE_VIEWS),
-        index=0,
-    )
-    source_config = SOURCE_VIEWS[source_name]
-    source_frame = _load_source(source_config["file"])
-    source_columns = {
-        column: label
-        for column, label in source_config["columns"].items()
-        if column in source_frame
-    }
-    source_display = source_frame[list(source_columns)].rename(columns=source_columns)
-    st.caption(
-        f"{source_config['description']} {len(source_frame):,} registros no arquivo; "
-        "os primeiros 100 aparecem abaixo."
-    )
-    column_config: dict[str, object] = {}
-    if "Link original" in source_display:
-        column_config["Link original"] = st.column_config.LinkColumn(
-            "Link original", display_text="Abrir"
+    with st.expander("Consultar ou baixar os dados originais"):
+        source_name = st.selectbox(
+            "Base",
+            options=list(SOURCE_VIEWS),
+            index=0,
         )
-    st.dataframe(
-        source_display.head(100),
-        hide_index=True,
-        width="stretch",
-        column_config=column_config,
-    )
-    st.download_button(
-        f"BAIXAR {source_config['file']}",
-        data=(DATA_DIR / source_config["file"]).read_bytes(),
-        file_name=source_config["file"],
-        mime="text/csv",
-        width="stretch",
-    )
+        source_config = SOURCE_VIEWS[source_name]
+        source_frame = _load_source(source_config["file"])
+        source_columns = {
+            column: label
+            for column, label in source_config["columns"].items()
+            if column in source_frame
+        }
+        source_display = source_frame[list(source_columns)].rename(
+            columns=source_columns
+        )
+        st.caption(
+            f"{source_config['description']} {len(source_frame):,} registros; "
+            "os primeiros 100 aparecem abaixo."
+        )
+        column_config: dict[str, object] = {}
+        if "Link original" in source_display:
+            column_config["Link original"] = st.column_config.LinkColumn(
+                "Link original", display_text="Abrir"
+            )
+        st.dataframe(
+            source_display.head(100),
+            hide_index=True,
+            width="stretch",
+            column_config=column_config,
+        )
+        st.download_button(
+            f"BAIXAR {source_config['file']}",
+            data=(DATA_DIR / source_config["file"]).read_bytes(),
+            file_name=source_config["file"],
+            mime="text/csv",
+            width="stretch",
+        )
 
-    _stage("04", "Gates de aprovação", "O que bloqueia uma ordem de compra hoje")
+    _stage("04", "Gates de aprovação", "Pendências que impedem compra automática")
     gates_html = "".join(
         [
             _gate(
                 "GATE-01",
                 "Ocupação real",
-                "Obter histórico operacional de comparáveis. A base atual não contém reservas.",
+                "Obter histórico operacional de comparáveis; a base não contém reservas.",
                 "ABERTO",
                 "state-open",
             ),
             _gate(
                 "GATE-02",
                 "Preço negociável",
-                "Confirmar disponibilidade e proposta. VivaReal informa somente preço pedido.",
+                "Confirmar disponibilidade e proposta; VivaReal informa preço pedido.",
                 "ABERTO",
                 "state-open",
             ),
             _gate(
                 "GATE-03",
                 "Operação permitida",
-                "Validar convenção condominial, estágio da obra e custos recorrentes.",
+                "Validar convenção, estágio, mobiliário e custos recorrentes.",
                 "ABERTO",
                 "state-open",
-            ),
-            _gate(
-                "GATE-04",
-                "Qualidade da localização",
-                "O resultado mantém direção, mas perde amostra ao excluir conflitos de bairro.",
-                "PARCIAL",
-                "state-partial",
             ),
         ]
     )
     st.html(f'<div class="gate-list">{gates_html}</div>')
-    st.html(
-        f"""
-        <div class="approval-bar">
-          <div class="approval-status"><span>Status do comitê</span><strong>Diligenciar, não comprar</strong></div>
-          <div class="approval-next"><strong>Próxima ação</strong>Validar o primeiro candidato abaixo e só avançar se os três gates críticos forem fechados sem ultrapassar {_money(reversal['winner_max_asking_price'])}.</div>
-        </div>
-        """
-    )
 
     st.html('<div id="queue"></div>')
-    _stage("05", "Fila de diligência", "Menos pesquisa, próxima ação explícita")
-    if shortlist.empty:
-        st.warning("Nenhum anúncio atende simultaneamente à Buy Box e ao preço limite.")
+    _stage("05", "Escolha um ativo", "Transforme análise em uma ação registrada")
+    if available_shortlist.empty:
+        st.warning("Não há candidatos restantes para este cenário e orçamento.")
     else:
-        rows = []
-        for index, (_, item) in enumerate(shortlist.head(5).iterrows(), start=1):
-            rows.append(
-                f"""
-                <div class="deal-row">
-                  <div class="deal-rank">#{index:02d}</div>
-                  <div class="deal-name">{escape(str(item['listing_title']))}<small>{escape(str(item['suburb']))} · {item['usable_area']:.0f} m² · {item['bedrooms']:.0f}Q · {item['parking_spaces']:.0f} vaga(s)</small></div>
-                  <div class="deal-metric"><span>Preço pedido</span><strong>{_money(item['sale_price'], True)}</strong></div>
-                  <div class="deal-metric"><span>Retorno bruto</span><strong>{_percent(item['scenario_gross_yield'])}</strong></div>
-                  <div class="deal-flags">{escape(str(item['readiness_status']))}<br>{escape(str(item['price_data_status']))}<br><a class="deal-link" href="{escape(str(item['link_url']))}" target="_blank">Abrir anúncio</a></div>
-                </div>
-                """
-            )
-        st.html(f'<div class="deal-queue">{"".join(rows)}</div>')
-        st.caption(
-            "A receita herda a tarifa típica do segmento, não uma previsão específica do imóvel. Preços muito abaixo da faixa típica são sinais de verificação, não vantagens assumidas."
+        candidate_ids = available_shortlist["listing_id"].tolist()
+        candidate_map = available_shortlist.set_index("listing_id")
+        selected_id = st.radio(
+            "Candidatos elegíveis",
+            options=candidate_ids,
+            format_func=lambda listing_id: (
+                f"{listing_id} · {_money(candidate_map.loc[listing_id, 'sale_price'])} · "
+                f"{candidate_map.loc[listing_id, 'usable_area']:.0f} m²"
+            ),
         )
-
-    with st.expander("Abrir metodologia e dados de auditoria"):
-        st.markdown(
+        selected = candidate_map.loc[selected_id].copy()
+        selected["listing_id"] = selected_id
+        st.html(
             f"""
-            **Contrato:** apartamentos com pelo menos 20 anúncios de short stay
-            precificados e 15 ofertas válidas. A base contém
-            {audit['airbnb_listings']:,} anúncios Airbnb, mas somente
-            {audit['priced_airbnb_listings']:,} possuem preços vinculáveis
-            ({_percent(audit['price_coverage'])}).
+            <div class="candidate-focus">
+              <div class="command-label">Candidato selecionado</div>
+              <h3>{escape(str(selected['listing_title']))}</h3>
+              <p>{escape(str(selected['suburb']))} · {selected['usable_area']:.0f} m² · {_money(selected['sale_price'])} pedidos · {_percent(selected['scenario_gross_yield'])} de retorno bruto no cenário.</p>
+              <div class="command-proof">{escape(str(selected['readiness_status']))} · {escape(str(selected['cost_data_status']))}</div>
+            </div>
             """
         )
+        action_left, action_right = st.columns(2)
+        with action_left:
+            if st.button("REJEITAR E VER PRÓXIMO", width="stretch"):
+                st.session_state["rejected_candidates"] = [*rejected, selected_id]
+                st.session_state.pop("approved_candidate", None)
+                st.rerun()
+        with action_right:
+            if st.button("AVANÇAR PARA DILIGÊNCIA", width="stretch"):
+                st.session_state["approved_candidate"] = selected_id
+
+        if st.session_state.get("approved_candidate") == selected_id:
+            memo = _decision_memo(
+                selected,
+                winner_name,
+                effective_price_limit,
+                budget,
+                st.session_state["mandate_policy"],
+                duel,
+            )
+            st.success(
+                "Decisão registrada: candidato enviado para diligência. Compra permanece bloqueada pelos gates abertos."
+            )
+            st.download_button(
+                "BAIXAR MEMORANDO DA DECISÃO",
+                data=memo,
+                file_name=f"diligencia-{selected_id}.md",
+                mime="text/markdown",
+                width="stretch",
+            )
+
+    with st.expander("Ver auditoria técnica completa"):
         robustness_display = robustness.copy()
         robustness_display["thesis_yield"] *= 100
         robustness_display["challenger_yield"] *= 100
         st.dataframe(robustness_display, hide_index=True, width="stretch")
-        evidence = case["metrics"].loc[
-            case["metrics"]["evidence_eligible"],
-            [
-                "suburb",
-                "profile",
-                "short_stay_listings",
-                "sale_listings",
-                "price_coverage",
-                "observed_median_rate",
-                "median_asking_price",
-                "gross_yield_scenario",
-            ],
-        ].copy()
+        evidence = case["metrics"].loc[case["metrics"]["evidence_eligible"]].copy()
         st.dataframe(evidence, hide_index=True, width="stretch")
 
     st.html(

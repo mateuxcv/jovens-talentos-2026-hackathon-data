@@ -16,17 +16,19 @@ A recomendação completa está em [`relatorio.md`](relatorio.md).
 
 ## Produto
 
-A aplicação funciona como um console operacional em cinco etapas:
+A aplicação funciona como um fluxo de decisão, não como um relatório estático:
 
-1. Mostra a próxima ação e seu impacto financeiro imediatamente.
-2. Confronta a tese interna e executa um downside test.
-3. Expõe evidências e permite consultar ou baixar as cinco bases originais.
-4. Mostra os gates que ainda bloqueiam a compra.
-5. Converte o resultado em Buy Box e fila de diligência.
+1. O decisor declara orçamento, ocupação-base e rigor mínimo da evidência.
+2. O motor seleciona o melhor desafiante elegível para a tese interna.
+3. Um laboratório permite alterar ocupação, tarifa e aquisição de cada lado.
+4. A estratégia e a shortlist mudam junto com o cenário vencedor.
+5. O decisor escolhe, rejeita ou avança um ativo para diligência.
+6. A aplicação gera um memorando da decisão para download.
 
-O CTA principal abre o primeiro candidato da fila de diligência. O downside test
-é a ação secundária que encontra a menor variação isolada de tarifa ou preço
-necessária para levar a decisão ao empate. Nenhum dos cálculos usa IA.
+O botão **Aplicar menor choque ao vencedor** altera de fato o cenário até o ponto
+de empate. O usuário também pode construir hipóteses assimétricas para as duas
+estratégias. As cinco bases originais permanecem disponíveis numa camada de
+prova, com nomes legíveis, prévia e download integral. Nenhum cálculo usa IA.
 
 ## Resultado Reproduzível
 
@@ -75,9 +77,9 @@ Retorno bruto de cenário
     = receita bruta anualizada de cenário / preço pedido mediano
 ```
 
-A ocupação é uma premissa ajustável. Como é aplicada igualmente aos segmentos,
-ela altera o nível do retorno, mas não cria artificialmente um vencedor. A
-aplicação calcula separadamente qual diferença de ocupação mudaria a escolha.
+A ocupação inicial é aplicada igualmente aos segmentos. No laboratório, o
+decisor pode testar ocupações diferentes e observar a mudança de vencedor sem
+alterar os dados de origem.
 
 ## Tratamento Dos Dados
 
