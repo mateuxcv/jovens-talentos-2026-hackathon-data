@@ -361,16 +361,6 @@ condições de reversão e shortlist.
 └── requirements.txt
 ```
 
-## Checklist De Entrega
-
-- [x] Recomendação escrita e posição sobre a tese do Centro.
-- [x] Código e artefatos reproduzíveis.
-- [x] Aplicação executável e testes automatizados.
-- [x] Dados originais acessíveis pela interface.
-- [ ] Exportar esta sessão completa para `ai-log/`.
-- [ ] Adicionar o link público do vídeo na primeira linha.
-- [ ] Validar repositório e vídeo em uma janela anônima.
-
 ## Desafio
 
 [Hackathon Jovens Talentos AI Builder 2026](https://seazone-tech.github.io/jovens-talentos-2026-hackathon-data/)
