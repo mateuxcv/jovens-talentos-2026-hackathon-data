@@ -104,7 +104,7 @@ Não é necessário conhecimento financeiro para acompanhar a recomendação:
 
 ## Jornada da aplicação
 
-A experiência final será organizada em quatro etapas:
+A experiência está organizada em quatro etapas:
 
 1. **Premissas operacionais:** gestão, WACC, desconto de negociação e vacância.
 2. **Mesa de Convicção:** veredito da tese, oportunidade e auditoria de riscos.
@@ -213,8 +213,11 @@ Fonte oficial: [dataset do Hackathon Jovens Talentos 2026](https://github.com/ma
 ├── data/                    # CSVs originais do desafio
 ├── src/
 │   ├── __init__.py
-│   └── engine.py            # Contrato de dados e regras determinísticas
+│   ├── ai_client.py         # Cliente HTTP direto para a LLM
+│   ├── engine.py            # Contrato de dados e regras determinísticas
+│   └── prompts.py           # Limites e instruções do auditor cético
 ├── ai-log/                  # Histórico textual das interações com IA
+├── app.py                   # Mesa de Convicção em Streamlit
 ├── index.html               # Enunciado original do desafio
 ├── README.md
 └── requirements.txt
@@ -282,17 +285,33 @@ PY
 
 ### Executar a interface
 
-A interface Streamlit ainda está em construção. Quando `app.py` estiver
-disponível, poderá ser iniciada com:
-
 ```bash
 streamlit run app.py
 ```
 
+O navegador abrirá a Mesa de Convicção em `http://localhost:8501`. Os controles
+da barra lateral recalculam métricas, sensibilidade e shortlist automaticamente.
+
+### Ativar o auditor com IA
+
+A aplicação funciona integralmente sem uma chave de IA. Para habilitar o parecer
+do auditor cético, configure uma API compatível com Chat Completions:
+
+```bash
+export LLM_API_KEY="sua-chave"
+export LLM_MODEL="gpt-4o-mini"
+export LLM_API_URL="https://api.openai.com/v1/chat/completions"
+streamlit run app.py
+```
+
+`LLM_MODEL` e `LLM_API_URL` são opcionais. Cada parecer gerado é registrado em
+`ai-log/` junto às evidências determinísticas enviadas ao modelo. A chave nunca é
+incluída no arquivo de auditoria.
+
 ## Governança da IA
 
-A futura camada de IA receberá somente um payload estruturado produzido por
-`engine.py`. Seu escopo será limitado a:
+A camada de IA recebe somente um payload estruturado produzido por
+`engine.py`. Seu escopo é limitado a:
 
 - sintetizar o parecer executivo;
 - confrontar a tese com os resultados calculados;
@@ -300,7 +319,7 @@ A futura camada de IA receberá somente um payload estruturado produzido por
 - explicar por que uma recomendação muda em determinado cenário.
 
 A LLM não poderá calcular ADR, receita, preço por m², yield, cap rate ou ponto de
-invalidação. O texto produzido será armazenado em `ai-log/` para auditoria.
+invalidação. O texto produzido é armazenado em `ai-log/` para auditoria.
 
 ## Limitações conhecidas
 
@@ -318,9 +337,9 @@ invalidação. O texto produzido será armazenado em `ai-log/` para auditoria.
 - [x] Motor determinístico de métricas por segmento
 - [x] Sensibilidade Centro versus Morretes
 - [x] Shortlist rastreável de aquisição
-- [ ] Interface executiva em Streamlit
-- [ ] Parecer do auditor cético com LLM
-- [ ] Exportação das sessões para `ai-log/`
+- [x] Interface executiva em Streamlit
+- [x] Parecer opcional do auditor cético com LLM
+- [x] Exportação automática das sessões de IA para `ai-log/`
 - [ ] Vídeo de apresentação
 
 ## Desafio

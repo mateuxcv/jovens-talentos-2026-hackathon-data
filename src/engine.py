@@ -7,14 +7,13 @@ calculation to the AI layer.
 
 from __future__ import annotations
 
+import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
-import unicodedata
 
 import numpy as np
 import pandas as pd
-
 
 DATA_FILES = {
     "details": "Details_Itapema.csv",
@@ -168,9 +167,7 @@ def normalize_datasets(
             normalized[name][column], errors="coerce"
         )
 
-    normalized["mesh"]["suburb"] = normalized["mesh"]["suburb"].map(
-        _normalize_suburb
-    )
+    normalized["mesh"]["suburb"] = normalized["mesh"]["suburb"].map(_normalize_suburb)
     normalized["vivareal"]["suburb"] = normalized["vivareal"]["suburb"].map(
         _normalize_suburb
     )
@@ -202,7 +199,8 @@ def build_market_segments(
     frames = normalize_datasets(datasets)
 
     listing_adr = (
-        frames["prices"].loc[frames["prices"]["price"] > 0]
+        frames["prices"]
+        .loc[frames["prices"]["price"] > 0]
         .groupby("airbnb_listing_id", as_index=False)
         .agg(median_adr=("price", "median"), observed_nights=("price", "size"))
     )
@@ -241,13 +239,17 @@ def build_market_segments(
         .reset_index()
     )
 
-    sales = frames["vivareal"].loc[
-        (frames["vivareal"]["listing_type"] == "apartamento")
-        & (frames["vivareal"]["sale_price"] > 0)
-        & (frames["vivareal"]["usable_area"] > 0)
-        & frames["vivareal"]["bedrooms"].notna()
-        & frames["vivareal"]["suburb"].notna()
-    ].copy()
+    sales = (
+        frames["vivareal"]
+        .loc[
+            (frames["vivareal"]["listing_type"] == "apartamento")
+            & (frames["vivareal"]["sale_price"] > 0)
+            & (frames["vivareal"]["usable_area"] > 0)
+            & frames["vivareal"]["bedrooms"].notna()
+            & frames["vivareal"]["suburb"].notna()
+        ]
+        .copy()
+    )
     sales["profile"] = sales["bedrooms"].map(_bedroom_profile)
     sales["asking_price_per_sqm"] = sales["sale_price"] / sales["usable_area"]
     sale_segments = (
@@ -433,16 +435,14 @@ def build_acquisition_shortlist(
         * assumptions.days_per_year
         * (1 - assumptions.vacancy_rate)
     )
-    candidates["property_costs_complete"] = candidates[
-        ["monthly_condo_fee", "yearly_iptu"]
-    ].notna().all(axis=1)
-    candidates["known_annual_property_costs"] = (
-        candidates["monthly_condo_fee"].fillna(0) * 12
-        + candidates["yearly_iptu"].fillna(0)
+    candidates["property_costs_complete"] = (
+        candidates[["monthly_condo_fee", "yearly_iptu"]].notna().all(axis=1)
     )
+    candidates["known_annual_property_costs"] = candidates["monthly_condo_fee"].fillna(
+        0
+    ) * 12 + candidates["yearly_iptu"].fillna(0)
     candidates["estimated_annual_noi"] = (
-        candidates["annual_gross_revenue"]
-        * (1 - assumptions.management_fee_rate)
+        candidates["annual_gross_revenue"] * (1 - assumptions.management_fee_rate)
         - candidates["known_annual_property_costs"]
     )
     candidates["estimated_net_cap_rate"] = _safe_divide(
@@ -484,7 +484,7 @@ def build_decision_data(
     data_dir: str | Path,
     assumptions: InvestmentAssumptions | None = None,
 ) -> dict[str, object]:
-    """Convenience entry point consumed by the future Streamlit application."""
+    """Convenience entry point consumed by the Streamlit application."""
 
     assumptions = assumptions or InvestmentAssumptions()
     datasets = load_datasets(data_dir)
@@ -549,12 +549,16 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     return numerator.div(denominator.where(denominator > 0))
 
 
-def _select_segment(metrics: pd.DataFrame, suburb: str | None, profile: str) -> pd.Series:
+def _select_segment(
+    metrics: pd.DataFrame, suburb: str | None, profile: str
+) -> pd.Series:
     selected = metrics.loc[
         (metrics["suburb"] == suburb) & (metrics["profile"] == profile)
     ]
     if len(selected) != 1:
-        raise ValueError(f"Expected one segment for {suburb}/{profile}, found {len(selected)}")
+        raise ValueError(
+            f"Expected one segment for {suburb}/{profile}, found {len(selected)}"
+        )
     return selected.iloc[0]
 
 
