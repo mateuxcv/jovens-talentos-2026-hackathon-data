@@ -104,12 +104,17 @@ Não é necessário conhecimento financeiro para acompanhar a recomendação:
 
 ## Jornada da aplicação
 
-A experiência está organizada em quatro etapas:
+A experiência está organizada como um memorando de decisão em cinco etapas:
 
-1. **Premissas operacionais:** gestão, WACC, desconto de negociação e vacância.
-2. **Mesa de Convicção:** veredito da tese, oportunidade e auditoria de riscos.
-3. **Ponto de invalidação:** comparação dinâmica entre Centro e Morretes.
-4. **Shortlist de aquisição:** imóveis reais aderentes ao mandato de 2Q.
+1. **Contexto:** qual decisão precisa ser tomada e sob quais premissas.
+2. **Sinais encontrados:** evidências que sustentam ou enfraquecem cada tese.
+3. **Risco e invalidação:** fragilidades e condições que mudariam a escolha.
+4. **Recomendação final:** ação proposta, exceções e o que não fazer.
+5. **Próxima ação:** imóveis reais que devem seguir para diligência.
+
+A interface evita métricas isoladas e gráficos decorativos. Cada número aparece
+junto de sua implicação para o negócio, e o único gráfico responde diretamente
+quando a preferência entre Centro e Morretes se altera.
 
 ## Metodologia
 
