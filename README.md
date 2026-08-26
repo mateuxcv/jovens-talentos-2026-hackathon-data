@@ -1,5 +1,7 @@
 # Quebre a Tese
 
+Link: https://jovens-talentos-2026-hackathon-data-gxcz26qwamcznwqmayecfy.streamlit.app/
+
 Sistema de apoio à decisão de investimento imobiliário para a Seazone. O
 produto transforma os dados de Airbnb e VivaReal de Itapema em uma decisão
 condicionada: qual perfil priorizar, quais imóveis investigar e o que precisaria
