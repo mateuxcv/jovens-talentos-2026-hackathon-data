@@ -15,6 +15,11 @@ para responder uma pergunta de investimento:
 > **Onde e em qual perfil de imóvel a Seazone deve alocar capital para operação
 > de short-stay em Itapema?**
 
+Em termos simples, a Mesa de Convicção cruza o valor de compra de um imóvel com
+seu potencial de receita em hospedagens de curta duração. O resultado mostra
+qual estratégia oferece a melhor relação entre capital investido, retorno e
+risco, além de indicar imóveis que podem ser avaliados pela equipe de aquisição.
+
 ## Veredito executivo
 
 ### Tese de compactos e studios no Centro: refutada
@@ -32,6 +37,57 @@ O perfil recomendado acomoda de 4 a 6 hóspedes e deve, preferencialmente,
 oferecer vaga de garagem, ar-condicionado e reserva instantânea. Esses atributos
 estão presentes no motor como evidências operacionais, e não como pontuações
 arbitrárias geradas por IA.
+
+### O que essa decisão significa
+
+- **Não comprar apenas pelo endereço:** um bairro valorizado pode gerar boa
+  receita, mas ainda entregar retorno insuficiente diante do preço de compra.
+- **Priorizar eficiência do capital:** Morretes permite acessar o mercado com
+  menor investimento e maior retorno percentual.
+- **Preservar opções estratégicas:** Centro continua relevante quando
+  previsibilidade, experiência do hóspede e facilidade de saída pesam mais que o
+  yield isolado.
+- **Usar Meia Praia para escala:** a região é adequada quando o objetivo é
+  volume de receita e liquidez, desde que o preço do imóvel seja disciplinado.
+
+## Como o produto apoia decisões reais
+
+### Comitê de investimento
+
+Antes de aprovar uma compra, o comitê compara retorno projetado, custo de
+oportunidade e qualidade da evidência. A Mesa apresenta um veredito direto e
+mostra quais premissas fariam a decisão mudar.
+
+### Time de aquisição
+
+O time recebe uma lista curta de imóveis compatíveis com a estratégia, em vez
+de pesquisar milhares de anúncios. Cada opção mantém preço, área, localização,
+custos conhecidos e link para validação comercial.
+
+### Liderança de operações
+
+A equipe pode alterar vacância e taxa de gestão para entender como uma operação
+mais ou menos eficiente afeta o retorno esperado antes de assumir o ativo.
+
+### Auditoria de risco
+
+O produto evidencia baixa amostragem, sazonalidade, custos ausentes e distância
+entre preço anunciado e preço efetivamente negociado. A IA transforma essas
+limitações em um parecer legível, sem modificar os números.
+
+## Como interpretar os indicadores
+
+Não é necessário conhecimento financeiro para acompanhar a recomendação:
+
+| Indicador | Em linguagem simples | Por que importa |
+|---|---|---|
+| **ADR** | Valor típico cobrado por uma diária | Indica o potencial de receita do imóvel |
+| **Vacância** | Parcela do ano em que o imóvel fica sem hóspedes | Evita projetar ocupação irreal de 100% |
+| **Receita bruta** | Diárias esperadas antes dos custos | Mostra a capacidade de faturamento |
+| **NOI** | Receita após gestão e custos imobiliários conhecidos | Aproxima o caixa operacional produzido pelo ativo |
+| **Yield / Cap Rate** | Retorno anual dividido pelo valor investido | Permite comparar imóveis de preços diferentes |
+| **WACC** | Retorno mínimo exigido para compensar o capital aplicado | Indica se o investimento cria valor suficiente |
+| **Ponto de invalidação** | Limite de preço ou premissa que altera a recomendação | Mostra quando a tese deixa de ser válida |
 
 ## Princípios do produto
 
@@ -175,6 +231,24 @@ Fonte oficial: [dataset do Hackathon Jovens Talentos 2026](https://github.com/ma
 | `run_sensitivity_analysis` | Encontrar o crossover de retorno entre estratégias |
 | `build_acquisition_shortlist` | Filtrar e ordenar imóveis reais para aquisição |
 | `build_decision_data` | Entregar todos os dados necessários para a interface |
+
+## Tecnologias e seus casos de uso
+
+A tecnologia é deliberadamente simples. Cada ferramenta resolve uma necessidade
+concreta do produto e pode ser substituída sem alterar a tese de investimento.
+
+| Tecnologia | Uso no projeto | Exemplo para quem utiliza o produto |
+|---|---|---|
+| **Python** | Organiza as regras de negócio e o fluxo dos cálculos | Recalcular toda a recomendação quando uma premissa muda |
+| **Pandas** | Limpa, conecta e resume os dados de Airbnb e VivaReal | Comparar a diária típica e o preço de compra por bairro |
+| **NumPy** | Executa variações numéricas de forma consistente | Simular diferentes preços para encontrar o ponto de invalidação |
+| **Streamlit** | Transforma os resultados em uma aplicação web interativa | Permitir que um executivo altere a vacância sem editar código |
+| **Plotly** | Exibe gráficos interativos de decisão | Visualizar em que cenário Centro e Morretes trocam de posição |
+| **LLM via API** | Redige a síntese executiva e questiona fragilidades | Produzir um parecer de risco usando apenas números calculados pelo motor |
+
+Não são utilizados frameworks complexos de agentes. A camada de IA é pequena e
+controlada para preservar rastreabilidade, velocidade de desenvolvimento e
+confiança na recomendação.
 
 ## Como executar
 
