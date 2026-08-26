@@ -193,6 +193,11 @@ def _inject_styles() -> None:
         .mandate-rule div { background:var(--surface); padding:17px; }
         .mandate-rule span { display:block; color:var(--muted); font-size:.7rem; }
         .mandate-rule strong { display:block; margin-top:5px; font-size:.86rem; }
+        .guide-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:18px 0 24px; }
+        .guide-step { background:var(--surface); border:1px solid var(--line); padding:14px; }
+        .guide-step span { display:block; color:var(--teal); font:600 .65rem "IBM Plex Mono",monospace; }
+        .guide-step strong { display:block; font-size:.82rem; margin-top:5px; }
+        .hint { background:#f7f9f7; border-left:3px solid var(--lime); color:var(--muted); padding:12px 14px; margin:10px 0 16px; font-size:.81rem; }
 
         .lab-status { display:flex; justify-content:space-between; gap:18px; align-items:center; background:var(--ink); color:#fff; padding:18px 20px; margin-bottom:14px; }
         .lab-status span { color:#9bacaa; font-size:.74rem; }
@@ -208,6 +213,14 @@ def _inject_styles() -> None:
         .candidate-focus { background:var(--surface); border:2px solid var(--teal); padding:24px; margin-top:14px; }
         .candidate-focus h3 { font-size:1.35rem; margin:8px 0; }
         .candidate-focus p { color:var(--muted); font-size:.86rem; }
+        .memo-preview { background:var(--ink); color:#fff; padding:28px; margin-top:20px; border-top:6px solid var(--lime); }
+        .memo-preview h3 { color:#fff; font-size:1.55rem; margin:8px 0 18px; }
+        .memo-preview p { color:#aebcb8; }
+        .memo-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#374341; }
+        .memo-grid div { background:#1a2525; padding:16px; }
+        .memo-grid span { display:block; color:#91a09c; font-size:.7rem; }
+        .memo-grid strong { display:block; color:#fff; margin-top:5px; font:600 .86rem "IBM Plex Mono",monospace; }
+        .memo-gates { color:#f2d4cd; font-size:.8rem; margin-top:16px; }
         .footnote { color:var(--muted); font-size:.76rem; border-top:1px solid var(--line); padding-top:18px; margin-top:42px; }
         div[data-testid="stExpander"] { background:var(--surface); border-color:var(--line); border-radius:3px; }
 
@@ -220,7 +233,7 @@ def _inject_styles() -> None:
             .compare-head span:first-child, .compare-row span:first-child { grid-column:1/-1; }
             .evidence-row, .gate-row, .deal-row { grid-template-columns:1fr; gap:7px; }
             .evidence-result { text-align:left; }
-            .mandate-rule, .lab-result { grid-template-columns:1fr; }
+            .mandate-rule, .lab-result, .guide-strip, .memo-grid { grid-template-columns:1fr; }
         }
         </style>
         """
@@ -366,8 +379,8 @@ uma autorização de compra.
 
 1. Validar ocupação e tarifa com histórico operacional comparável.
 2. Confirmar disponibilidade e preço negociável.
-3. Confirmar permissão condominial para short stay.
-4. Validar estágio, custos recorrentes, mobiliário e condição do imóvel.
+3. Confirmar permissão para short stay, estágio, custos recorrentes, mobiliário
+   e condição do imóvel.
 
 ## Fonte
 
@@ -394,7 +407,13 @@ def main() -> None:
               <div class="mandate-rule">
                 <div><span>Objetivo</span><strong>Eficiência do capital</strong></div>
                 <div><span>Mercado</span><strong>Itapema · apartamentos</strong></div>
-                <div><span>Saída</span><strong>Buy Box + diligência</strong></div>
+                <div><span>Saída</span><strong>Perfil de compra + diligência</strong></div>
+              </div>
+              <div class="guide-strip">
+                <div class="guide-step"><span>01</span><strong>Defina os limites</strong></div>
+                <div class="guide-step"><span>02</span><strong>Compare as estratégias</strong></div>
+                <div class="guide-step"><span>03</span><strong>Force a recomendação a falhar</strong></div>
+                <div class="guide-step"><span>04</span><strong>Registre a decisão</strong></div>
               </div>
             </div>
             """
@@ -407,6 +426,7 @@ def main() -> None:
                 value=1_000_000,
                 step=50_000,
                 format="%d",
+                help="Segmentos com preço típico acima deste valor ficam fora do mandato.",
             )
             occupancy = st.slider(
                 "Ocupação anual para o cenário inicial",
@@ -415,6 +435,7 @@ def main() -> None:
                 value=62.5,
                 step=2.5,
                 format="%.1f%%",
+                help="É uma premissa inicial de comparação, não ocupação observada nos dados.",
             )
             evidence_policy = st.radio(
                 "Política de evidência",
@@ -424,6 +445,10 @@ def main() -> None:
             )
             submitted = st.form_submit_button(
                 "ANALISAR OPORTUNIDADES", width="stretch"
+            )
+            st.caption(
+                "Dica: comece com a política Padrão. Depois refaça o mandato em "
+                "modo Conservador para verificar se a recomendação sobrevive."
             )
         if not submitted:
             st.stop()
@@ -595,6 +620,14 @@ def main() -> None:
         """
     )
 
+    with st.expander("Como usar este workspace", expanded=False):
+        st.markdown(
+            "1. **Leia o confronto:** ele mostra por que uma estratégia lidera.\n"
+            "2. **Teste sua dúvida:** altere ocupação, tarifa ou preço de cada lado.\n"
+            "3. **Confira a fonte:** abra as evidências ou os CSVs originais.\n"
+            "4. **Escolha um ativo:** rejeite-o ou registre seu avanço para diligência."
+        )
+
     _stage("01", "Confronto atual", "O placar muda quando suas premissas mudam")
     st.html(
         f"""
@@ -612,6 +645,9 @@ def main() -> None:
 
     st.html('<div id="lab"></div>')
     _stage("02", "Laboratório de cenário", "Tente fazer a recomendação perder")
+    st.html(
+        '<div class="hint"><strong>Dica:</strong> use o botão de choque automático para encontrar o empate ou mova os controles para testar uma hipótese própria. Cada lado pode ter premissas diferentes.</div>'
+    )
     left, right = st.columns(2, gap="medium")
     with left:
         st.markdown(f"#### Hipótese: {thesis_name}")
@@ -622,6 +658,7 @@ def main() -> None:
             step=1.0,
             key="scenario_thesis_occupancy",
             on_change=_invalidate_approval,
+            help="Percentual de noites do ano assumidas como ocupadas para compactos no Centro.",
         )
         st.slider(
             "Choque na tarifa da hipótese",
@@ -631,6 +668,7 @@ def main() -> None:
             format="%.0f%%",
             key="scenario_thesis_rate",
             on_change=_invalidate_approval,
+            help="Ajuste percentual sobre a tarifa mediana observada, sem alterar o dado original.",
         )
         st.number_input(
             "Preço da hipótese",
@@ -639,6 +677,7 @@ def main() -> None:
             step=25_000.0,
             key="scenario_thesis_price",
             on_change=_invalidate_approval,
+            help="Preço de aquisição que você quer testar para a hipótese interna.",
         )
     with right:
         st.markdown(f"#### Desafiante: {challenger_name}")
@@ -649,6 +688,7 @@ def main() -> None:
             step=1.0,
             key="scenario_challenger_occupancy",
             on_change=_invalidate_approval,
+            help="Percentual de noites do ano assumidas como ocupadas para o desafiante.",
         )
         st.slider(
             "Choque na tarifa do desafiante",
@@ -658,6 +698,7 @@ def main() -> None:
             format="%.0f%%",
             key="scenario_challenger_rate",
             on_change=_invalidate_approval,
+            help="Ajuste percentual sobre a tarifa mediana observada, sem alterar o dado original.",
         )
         st.number_input(
             "Preço do desafiante",
@@ -666,6 +707,7 @@ def main() -> None:
             step=25_000.0,
             key="scenario_challenger_price",
             on_change=_invalidate_approval,
+            help="Preço de aquisição que você quer testar para o desafiante.",
         )
 
     if duel["leader"] == thesis_name:
@@ -810,6 +852,7 @@ def main() -> None:
                 f"{listing_id} · {_money(candidate_map.loc[listing_id, 'sale_price'])} · "
                 f"{candidate_map.loc[listing_id, 'usable_area']:.0f} m²"
             ),
+            help="Selecione um imóvel para ver o resumo antes de registrar a decisão.",
         )
         selected = candidate_map.loc[selected_id].copy()
         selected["listing_id"] = selected_id
@@ -823,13 +866,19 @@ def main() -> None:
             </div>
             """
         )
-        action_left, action_right = st.columns(2)
-        with action_left:
+        action_open, action_reject, action_advance = st.columns(3)
+        with action_open:
+            st.link_button(
+                "ABRIR ANÚNCIO ORIGINAL",
+                selected["link_url"],
+                width="stretch",
+            )
+        with action_reject:
             if st.button("REJEITAR E VER PRÓXIMO", width="stretch"):
                 st.session_state["rejected_candidates"] = [*rejected, selected_id]
                 st.session_state.pop("approved_candidate", None)
                 st.rerun()
-        with action_right:
+        with action_advance:
             if st.button("AVANÇAR PARA DILIGÊNCIA", width="stretch"):
                 st.session_state["approved_candidate"] = selected_id
 
@@ -845,6 +894,23 @@ def main() -> None:
             st.success(
                 "Decisão registrada: candidato enviado para diligência. Compra permanece bloqueada pelos gates abertos."
             )
+            st.html(
+                f"""
+                <div class="memo-preview">
+                  <div class="command-label">Prévia da decisão registrada</div>
+                  <h3>{escape(str(selected['listing_title']))}</h3>
+                  <p>{escape(winner_name)} · candidato {escape(str(selected_id))}</p>
+                  <div class="memo-grid">
+                    <div><span>Preço pedido</span><strong>{_money(selected['sale_price'])}</strong></div>
+                    <div><span>Retorno bruto do imóvel</span><strong>{_percent(selected['scenario_gross_yield'])}</strong></div>
+                    <div><span>Limite efetivo</span><strong>{_money(effective_price_limit)}</strong></div>
+                  </div>
+                  <div class="memo-gates">3 gates permanecem abertos: operação, preço negociável e desempenho realizado.</div>
+                </div>
+                """
+            )
+            with st.expander("Visualizar memorando completo", expanded=True):
+                st.markdown(memo)
             st.download_button(
                 "BAIXAR MEMORANDO DA DECISÃO",
                 data=memo,
