@@ -16,18 +16,16 @@ A recomendação completa está em [`relatorio.md`](relatorio.md).
 
 ## Produto
 
-A aplicação conduz uma deliberação em seis atos:
+A aplicação funciona como um console operacional em quatro etapas:
 
-1. Confronta a tese interna com o melhor desafiante elegível.
-2. Separa fatos observados, cálculos e premissas.
-3. Exibe peças de evidência rastreáveis.
-4. Procura o menor choque que derruba o vencedor.
-5. Mantém objeções abertas antes do aporte.
-6. Converte o resultado em Buy Box e fila de diligência.
+1. Mostra a próxima ação e seu impacto financeiro imediatamente.
+2. Confronta a tese interna e executa um downside test.
+3. Expõe evidências e gates que ainda bloqueiam a compra.
+4. Converte o resultado em Buy Box e fila de diligência.
 
-O botão **Tentar quebrar a recomendação** é o centro da experiência. O cálculo
-não usa IA: ele encontra a menor variação isolada de tarifa ou preço necessária
-para levar a decisão ao empate.
+O CTA principal abre o primeiro candidato da fila de diligência. O downside test
+é a ação secundária que encontra a menor variação isolada de tarifa ou preço
+necessária para levar a decisão ao empate. Nenhum dos cálculos usa IA.
 
 ## Resultado Reproduzível
 
@@ -43,9 +41,9 @@ Com a premissa ilustrativa de 62,5% de ocupação anual comum aos segmentos:
 | Ofertas de venda válidas | 19 | 892 |
 
 O resultado aponta o mesmo vencedor nos três tratamentos elegíveis; um quarto
-tratamento fica inconclusivo porque deixa a tese abaixo do corte amostral. A cobertura de preços também é desigual: 66,1%
-para Centro Studio/1Q e 22,3% para Morretes 2Q. Por isso, a força da evidência é
-classificada como **limitada**.
+tratamento fica inconclusivo porque deixa a tese abaixo do corte amostral. A
+cobertura de preços também é desigual: 66,1% para Centro Studio/1Q e 22,3% para
+Morretes 2Q. Por isso, a força da evidência é classificada como **limitada**.
 
 ### Ponto de reversão
 
