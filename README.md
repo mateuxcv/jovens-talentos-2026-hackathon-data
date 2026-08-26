@@ -1,5 +1,3 @@
-> **Vídeo de apresentação:** link a adicionar antes da entrega final.
-
 # Quebre a Tese
 
 Sistema de apoio à decisão de investimento imobiliário para a Seazone. O
