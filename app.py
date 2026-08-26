@@ -1,38 +1,22 @@
-"""Executive Streamlit interface for the Seazone Investment Decision Engine."""
+"""Guided Streamlit experience for the Itapema investment decision."""
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 
-from src.ai_client import (
-    AIClientError,
-    LLMConfig,
-    request_analysis,
-    save_ai_log,
-)
-from src.engine import (
-    InvestmentAssumptions,
-    build_acquisition_shortlist,
-    build_market_segments,
-    load_datasets,
-    run_sensitivity_analysis,
-)
-from src.prompts import AUDITOR_SYSTEM_PROMPT, build_auditor_prompt
+from src.engine import DecisionAssumptions, build_decision_data
 
 DATA_DIR = Path(__file__).parent / "data"
-STRATEGIC_SUBURBS = ("Morretes", "Centro", "Meia Praia")
-
 
 st.set_page_config(
-    page_title="Mesa de Convicção | Seazone IDE",
-    page_icon="SZ",
+    page_title="Quebre a Tese | Itapema",
+    page_icon="Q",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -40,110 +24,112 @@ def _inject_styles() -> None:
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,600;6..72,700&display=swap');
 
         :root {
-            --ink: #102a2d;
-            --muted: #607174;
-            --paper: #f5f4ee;
-            --card: #fffef9;
-            --line: #d8ddd7;
-            --teal: #087e72;
-            --teal-dark: #075a55;
-            --mint: #dceee8;
-            --coral: #dc684f;
-            --amber: #d99a2b;
+            --paper: #f1eee5;
+            --sheet: #fbfaf5;
+            --ink: #17201e;
+            --muted: #68716c;
+            --line: #cbc8bc;
+            --signal: #d94a35;
+            --signal-soft: #f3d8d0;
+            --green: #0e6b58;
+            --green-soft: #d9e8df;
+            --acid: #d9ef72;
         }
-
-        html, body, [class*="css"] { font-family: "DM Sans", sans-serif; }
+        html, body, [class*="css"] { font-family: "IBM Plex Sans", sans-serif; }
         .stApp { background: var(--paper); color: var(--ink); }
-        h1, h2, h3 { font-family: "Manrope", sans-serif !important; letter-spacing: -0.035em; }
-        h1 { color: var(--ink); }
-        [data-testid="stSidebar"] { background: #102a2d; }
-        [data-testid="stSidebar"] * { color: #f7f5ed !important; }
-        [data-testid="stSidebar"] input { color: var(--ink) !important; }
-        [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,.16); }
-        .hero {
-            background: var(--ink);
-            color: #f8f6ef;
-            padding: clamp(24px, 4vw, 48px);
-            border-radius: 0 0 22px 22px;
-            margin-bottom: 28px;
-            position: relative;
-            overflow: hidden;
+        .block-container { max-width: 1120px; padding-top: 1.5rem; padding-bottom: 5rem; }
+        h1, h2, h3 { font-family: "Newsreader", serif !important; color: var(--ink); letter-spacing: -.025em; }
+        h2 { font-size: clamp(2rem, 4vw, 3.25rem) !important; line-height: 1 !important; }
+        [data-testid="stHeader"] { background: transparent; }
+        [data-testid="stSidebar"] { background: var(--ink); }
+        [data-testid="stSidebar"] * { color: #f8f6ee !important; }
+
+        .case-bar {
+            display: flex; justify-content: space-between; gap: 20px; align-items: center;
+            border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+            padding: 11px 0; margin-bottom: 34px; font: 600 .72rem "IBM Plex Mono", monospace;
+            letter-spacing: .08em; text-transform: uppercase;
         }
-        .hero:after {
-            content: "";
-            position: absolute;
-            width: 220px;
-            height: 220px;
-            right: -70px;
-            top: -90px;
-            border: 42px solid rgba(92, 224, 195, .12);
-            border-radius: 50%;
+        .hero { padding: 2.1rem 0 2.8rem; }
+        .hero .eyebrow, .kicker { color: var(--signal); font: 600 .72rem "IBM Plex Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
+        .hero h1 { font-size: clamp(3.2rem, 8vw, 7rem); line-height: .82; max-width: 900px; margin: 20px 0 26px; }
+        .hero p { color: var(--muted); font-size: 1.08rem; max-width: 720px; }
+        .verdict-stamp {
+            display: inline-flex; align-items: center; gap: 10px; margin-top: 22px;
+            border: 2px solid var(--signal); color: var(--signal); padding: 10px 14px;
+            font: 600 .78rem "IBM Plex Mono", monospace; text-transform: uppercase;
+            transform: rotate(-1deg);
         }
-        .eyebrow { color: #82d6c5; font-size: .75rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-        .hero h1 { color: #fffef9; font-size: clamp(2rem, 5vw, 4.1rem); line-height: .98; margin: 12px 0 16px; max-width: 850px; }
-        .hero p { color: #cad8d5; max-width: 760px; font-size: 1.05rem; margin: 0; }
-        .decision-status {
-            display: inline-block;
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid rgba(255,255,255,.22);
-            color: #f8f6ef;
-            font-size: .9rem;
-            font-weight: 700;
-        }
-        .section-kicker { color: var(--teal); font-size: .74rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-top: 32px; }
-        .decision-question, .evidence-sheet, .risk-sheet {
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: 14px;
-        }
-        .decision-question { padding: 24px 28px; margin-bottom: 12px; }
-        .decision-question strong { color: var(--teal-dark); }
-        .evidence-sheet { overflow: hidden; }
-        .evidence-row {
-            display: grid;
-            grid-template-columns: 42px minmax(180px, 1.2fr) minmax(150px, .7fr) minmax(220px, 1.3fr);
-            gap: 18px;
-            align-items: center;
-            padding: 22px 24px;
-            border-bottom: 1px solid var(--line);
-        }
-        .evidence-row:last-child { border-bottom: 0; }
-        .evidence-index { color: var(--teal); font: 800 .8rem "Manrope", sans-serif; }
-        .evidence-copy strong { display: block; color: var(--ink); margin-bottom: 4px; }
-        .evidence-copy span, .evidence-impact { color: var(--muted); font-size: .88rem; }
-        .evidence-value { font: 800 1.35rem "Manrope", sans-serif; color: var(--ink); }
-        .evidence-value span { display: block; color: var(--muted); font: 500 .76rem "DM Sans", sans-serif; margin-top: 3px; }
-        .risk-sheet { padding: 22px 26px; border-left: 4px solid var(--coral); }
-        .risk-sheet h3 { margin-top: 0; }
-        .risk-sheet li { margin-bottom: 9px; color: var(--muted); }
-        .recommendation {
-            background: var(--ink);
-            color: #f8f6ef;
-            border-radius: 14px;
-            padding: clamp(24px, 4vw, 42px);
-            margin: 8px 0 22px;
-        }
-        .recommendation h2 { color: #fffef9; max-width: 850px; margin: 8px 0 16px; }
-        .recommendation p { color: #cad8d5; max-width: 850px; }
-        .recommendation-label { color: #82d6c5; font-size: .74rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-        .decision-rule { border-left: 3px solid var(--amber); padding-left: 16px; margin-top: 20px; }
-        .decision-rule strong { color: #ffe0a3; }
-        .shortlist-lead { border-left: 4px solid var(--teal); padding: 2px 0 2px 18px; margin: 16px 0 22px; }
-        .microcopy { color: var(--muted); font-size: .82rem; }
-        .stButton > button {
-            border-radius: 999px;
-            border: 1px solid var(--teal);
-            font-weight: 700;
-        }
-        @media (max-width: 700px) {
-            .hero { padding: 24px 20px; border-radius: 0 0 16px 16px; }
-            .hero h1 { font-size: 2.2rem; }
-            .evidence-row { grid-template-columns: 28px 1fr; gap: 10px; }
-            .evidence-value, .evidence-impact { grid-column: 2; }
+        .section { margin-top: 64px; }
+        .section-rule { border-top: 1px solid var(--ink); padding-top: 13px; margin-bottom: 24px; display:flex; justify-content:space-between; gap:16px; }
+        .section-rule span { font: 600 .7rem "IBM Plex Mono", monospace; letter-spacing: .1em; text-transform: uppercase; }
+
+        .duel-card { background: var(--sheet); border: 1px solid var(--line); padding: 28px; min-height: 300px; position: relative; }
+        .duel-card.challenger { border-top: 5px solid var(--green); }
+        .duel-card.thesis { border-top: 5px solid var(--signal); }
+        .duel-role { font: 600 .68rem "IBM Plex Mono", monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+        .duel-card h3 { font-size: 2rem; margin: 18px 0 26px; }
+        .duel-metric { border-top: 1px solid var(--line); padding: 12px 0; display:flex; justify-content:space-between; gap:14px; }
+        .duel-metric span { color:var(--muted); font-size:.84rem; }
+        .duel-metric strong { font-family:"IBM Plex Mono", monospace; font-size:.9rem; text-align:right; }
+        .winner-tag { display:inline-block; background:var(--acid); padding:6px 9px; font:600 .67rem "IBM Plex Mono", monospace; text-transform:uppercase; margin-top:16px; }
+
+        .evidence { display:grid; grid-template-columns:80px minmax(210px, .9fr) minmax(200px, 1.2fr) minmax(180px, .8fr); gap:20px; align-items:start; border-top:1px solid var(--line); padding:22px 0; }
+        .evidence:last-child { border-bottom:1px solid var(--line); }
+        .evidence-id { font:600 .72rem "IBM Plex Mono", monospace; color:var(--signal); }
+        .evidence-title { font-weight:700; }
+        .evidence-copy { color:var(--muted); font-size:.9rem; }
+        .evidence-value { font:600 1.15rem "IBM Plex Mono", monospace; }
+        .evidence-value small { display:block; color:var(--muted); font:400 .72rem "IBM Plex Sans", sans-serif; margin-top:5px; }
+
+        .attack-shell { background:var(--ink); color:#f7f5ed; padding:clamp(24px,5vw,52px); margin-top:22px; border-radius:2px; }
+        .attack-shell h3 { color:#fff; font-size:clamp(2rem,5vw,4rem); line-height:.95; margin:12px 0 18px; max-width:850px; }
+        .attack-shell p { color:#bec8c3; max-width:780px; }
+        .attack-number { color:var(--acid); font:600 clamp(2.5rem,7vw,5.5rem) "IBM Plex Mono", monospace; line-height:1; margin:28px 0 8px; }
+        .attack-label { color:#f7f5ed; font-size:1rem; }
+        .attack-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:#53605b; margin-top:30px; }
+        .attack-cell { background:#25302d; padding:18px; }
+        .attack-cell span { color:#aebbb5; display:block; font-size:.76rem; }
+        .attack-cell strong { color:#fff; display:block; margin-top:6px; font-family:"IBM Plex Mono",monospace; }
+
+        .objection { display:grid; grid-template-columns:88px minmax(180px,.8fr) minmax(260px,1.4fr) 150px; gap:18px; border-top:1px solid var(--line); padding:20px 0; align-items:center; }
+        .obj-id { font:600 .7rem "IBM Plex Mono",monospace; }
+        .obj-title { font-weight:700; }
+        .obj-copy { color:var(--muted); font-size:.88rem; }
+        .status-open, .status-partial, .status-resolved { font:600 .67rem "IBM Plex Mono",monospace; text-transform:uppercase; padding:7px 9px; text-align:center; }
+        .status-open { background:var(--signal-soft); color:#9d2f21; }
+        .status-partial { background:#efe2b8; color:#695314; }
+        .status-resolved { background:var(--green-soft); color:var(--green); }
+
+        .decision-sheet { background:var(--sheet); border:1px solid var(--ink); padding:clamp(26px,5vw,52px); position:relative; }
+        .decision-sheet:before { content:"PARECER"; position:absolute; right:20px; top:18px; color:var(--signal); border:2px solid var(--signal); padding:7px 10px; font:600 .68rem "IBM Plex Mono",monospace; transform:rotate(2deg); }
+        .decision-sheet h2 { max-width:820px; margin:20px 0; }
+        .decision-line { border-top:1px solid var(--line); padding:15px 0; display:grid; grid-template-columns:180px 1fr; gap:20px; }
+        .decision-line span { color:var(--muted); font-size:.82rem; }
+        .decision-line strong { font-size:.94rem; }
+
+        .property-card { background:var(--sheet); border:1px solid var(--line); padding:22px; min-height:270px; }
+        .property-card .rank { color:var(--signal); font:600 .7rem "IBM Plex Mono",monospace; }
+        .property-card h4 { font-family:"Newsreader",serif; font-size:1.35rem; line-height:1.08; margin:15px 0; }
+        .property-price { font:600 1.4rem "IBM Plex Mono",monospace; margin:16px 0 4px; }
+        .property-meta { color:var(--muted); font-size:.84rem; }
+        .property-status { border-top:1px solid var(--line); margin-top:16px; padding-top:13px; color:var(--signal); font:600 .68rem "IBM Plex Mono",monospace; text-transform:uppercase; }
+
+        .method-note { border-left:3px solid var(--ink); padding:2px 0 2px 18px; color:var(--muted); font-size:.9rem; }
+        .stButton > button { width:100%; min-height:56px; border-radius:0; border:1px solid var(--ink); background:var(--acid); color:var(--ink); font:700 .82rem "IBM Plex Mono",monospace; letter-spacing:.05em; }
+        .stButton > button:hover { background:var(--ink); color:var(--acid); border-color:var(--ink); }
+        [data-testid="stSlider"] { max-width:620px; }
+
+        @media (max-width: 760px) {
+            .block-container { padding-left:1rem; padding-right:1rem; }
+            .case-bar { align-items:flex-start; flex-direction:column; gap:5px; }
+            .hero h1 { font-size:3.6rem; }
+            .evidence, .objection { grid-template-columns:1fr; gap:8px; }
+            .attack-grid { grid-template-columns:1fr; }
+            .decision-line { grid-template-columns:1fr; gap:5px; }
         }
         </style>
         """,
@@ -152,8 +138,9 @@ def _inject_styles() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def _load_data() -> dict[str, pd.DataFrame]:
-    return load_datasets(DATA_DIR)
+def _build_case(occupancy_rate: float) -> dict[str, object]:
+    assumptions = DecisionAssumptions(occupancy_rate=occupancy_rate)
+    return build_decision_data(DATA_DIR, assumptions)
 
 
 def _money(value: float, compact: bool = False) -> str:
@@ -172,529 +159,325 @@ def _percent(value: float, decimals: int = 1) -> str:
     return f"{value * 100:.{decimals}f}%".replace(".", ",")
 
 
-def _segment(metrics: pd.DataFrame, suburb: str, profile: str = "2Q") -> pd.Series:
-    selected = metrics.loc[
-        (metrics["suburb"] == suburb) & (metrics["profile"] == profile)
-    ]
-    if selected.empty:
-        raise ValueError(f"Sem dados para {suburb}/{profile}")
-    return selected.iloc[0]
+def _segment_name(segment: pd.Series) -> str:
+    return f"{segment['suburb']} · {segment['profile']}"
 
 
-def _build_ai_evidence(
-    metrics: pd.DataFrame,
-    shortlist: pd.DataFrame,
-    assumptions: InvestmentAssumptions,
-    sensitivity: pd.DataFrame,
-) -> dict[str, Any]:
-    selected_columns = [
-        "suburb",
-        "profile",
-        "median_adr",
-        "airbnb_listings",
-        "median_asking_price",
-        "sale_listings",
-        "net_yield_asking",
-        "net_yield_negotiated",
-        "wacc_spread_negotiated",
-    ]
-    strategic = metrics.loc[
-        metrics["suburb"].isin(STRATEGIC_SUBURBS)
-        & metrics["profile"].isin(["Studio/1Q", "2Q"]),
-        selected_columns,
-    ].round(4)
-    return {
-        "veredito": "Tese de compactos/studios no Centro refutada; priorizar 2Q",
-        "premissas": {
-            "taxa_gestao": assumptions.management_fee_rate,
-            "wacc": assumptions.wacc_rate,
-            "desconto_negociacao": assumptions.negotiation_discount_rate,
-            "vacancia": assumptions.vacancy_rate,
-        },
-        "segmentos": strategic.to_dict(orient="records"),
-        "sensibilidade": dict(sensitivity.attrs),
-        "shortlist": {
-            "quantidade": len(shortlist),
-            "custos_completos": int(shortlist["property_costs_complete"].sum()),
-            "cap_rate_minimo": (
-                round(float(shortlist["estimated_net_cap_rate"].min()), 4)
-                if not shortlist.empty
-                else None
-            ),
-            "cap_rate_maximo": (
-                round(float(shortlist["estimated_net_cap_rate"].max()), 4)
-                if not shortlist.empty
-                else None
-            ),
-        },
-        "alertas_do_dataset": [
-            "snapshot estatico, sem transacoes realizadas",
-            "disponibilidade nao equivale a ocupacao observada",
-            "condominio e IPTU ausentes em parte dos anuncios",
-        ],
-    }
-
-
-def _render_sidebar() -> tuple[InvestmentAssumptions, tuple[str, ...], float]:
-    with st.sidebar:
-        st.markdown("## Mesa de Convicção")
-        st.caption("Premissas transparentes para o cenário de investimento")
-        st.divider()
-        management = st.slider(
-            "Taxa de gestão Seazone",
-            min_value=0,
-            max_value=40,
-            value=20,
-            step=1,
-            format="%d%%",
-            help="Percentual da receita destinado à gestão da operação.",
-        )
-        wacc = st.slider(
-            "Custo de oportunidade (WACC)",
-            min_value=5,
-            max_value=20,
-            value=10,
-            step=1,
-            format="%d%%",
-            help="Retorno anual mínimo esperado para justificar o capital.",
-        )
-        discount = st.slider(
-            "Desconto de negociação",
-            min_value=0,
-            max_value=20,
-            value=5,
-            step=1,
-            format="%d%%",
-            help="Redução esperada sobre o preço anunciado no VivaReal.",
-        )
-        vacancy = st.slider(
-            "Vacância projetada",
-            min_value=10.0,
-            max_value=70.0,
-            value=37.5,
-            step=0.5,
-            format="%.1f%%",
-            help="Parcela do ano em que a unidade permanece sem hóspedes.",
-        )
-        st.divider()
-        st.markdown("### Mandato de aquisição")
-        suburbs = st.multiselect(
-            "Bairros elegíveis",
-            options=["Centro", "Morretes"],
-            default=["Centro", "Morretes"],
-        )
-        max_price = st.slider(
-            "Preço pedido máximo",
-            min_value=500_000,
-            max_value=1_500_000,
-            value=950_000,
-            step=50_000,
-            format="R$ %d",
-        )
-        st.caption("Perfil fixado pela tese: 2 quartos · 60 a 85 m²")
-        st.divider()
-        st.caption("Fonte: snapshot oficial do desafio Seazone · Itapema/SC")
-
-    assumptions = InvestmentAssumptions(
-        management_fee_rate=management / 100,
-        wacc_rate=wacc / 100,
-        negotiation_discount_rate=discount / 100,
-        vacancy_rate=vacancy / 100,
-    )
-    return assumptions, tuple(suburbs), float(max_price)
-
-
-def _render_hero() -> None:
+def _section_rule(number: str, title: str, right: str = "") -> None:
     st.markdown(
-        """
-        <div class="hero">
-            <div class="eyebrow">Memorando de decisão · Itapema 2026</div>
-            <h1>Onde o próximo real deve ser investido?</h1>
-            <p>Uma leitura de aquisição para short-stay que conecta preço de entrada, capacidade de receita e risco operacional.</p>
-            <div class="decision-status">Posição atual · Refutar compactos no Centro e avançar com apartamentos de 2 quartos</div>
-        </div>
-        """,
+        f'<div class="section section-rule"><span>{number} · {escape(title)}</span><span>{escape(right)}</span></div>',
         unsafe_allow_html=True,
     )
 
 
-def _render_context(assumptions: InvestmentAssumptions) -> None:
-    occupied_nights = assumptions.days_per_year * (1 - assumptions.vacancy_rate)
-    st.markdown(
-        '<div class="section-kicker">01 · Contexto da decisão</div>',
-        unsafe_allow_html=True,
-    )
-    st.header("A escolha não é o bairro mais caro. É o uso mais eficiente do capital.")
+def _render_duel_card(segment: pd.Series, role: str, winner: bool) -> None:
+    css_class = "challenger" if role == "Desafiante calculado" else "thesis"
+    winner_tag = '<div class="winner-tag">lidera no cenário</div>' if winner else ""
     st.markdown(
         f"""
-        <div class="decision-question">
-            <strong>Decisão em pauta</strong><br>
-            Selecionar o perfil de imóvel e a região capazes de superar um custo de capital de <strong>{_percent(assumptions.wacc_rate)}</strong>, considerando <strong>{occupied_nights:.0f} noites ocupadas por ano</strong>, gestão de <strong>{_percent(assumptions.management_fee_rate)}</strong> e negociação de <strong>{_percent(assumptions.negotiation_discount_rate)}</strong> sobre o preço anunciado.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        "Os controles ao lado mudam o cenário, não os dados observados. "
-        "A recomendação é recalculada a cada alteração."
-    )
-
-
-def _render_conviction(
-    metrics: pd.DataFrame, assumptions: InvestmentAssumptions
-) -> None:
-    center_compact = _segment(metrics, "Centro", "Studio/1Q")
-    center_two = _segment(metrics, "Centro")
-    morretes_two = _segment(metrics, "Morretes")
-    meia_two = _segment(metrics, "Meia Praia")
-    compact_spread = center_compact["net_yield_negotiated"] - assumptions.wacc_rate
-    morretes_spread = morretes_two["net_yield_negotiated"] - assumptions.wacc_rate
-    compact_gap = (
-        morretes_two["net_yield_negotiated"] - center_compact["net_yield_negotiated"]
-    )
-    compact_wacc_read = "abaixo" if compact_spread < 0 else "acima"
-    morretes_wacc_read = "supera" if morretes_spread >= 0 else "fica abaixo de"
-    compact_gap_label = f"{compact_gap * 100:.1f}".replace(".", ",")
-    morretes_spread_label = f"{abs(morretes_spread) * 100:.1f}".replace(".", ",")
-
-    st.markdown(
-        '<div class="section-kicker">02 · Sinais encontrados</div>',
-        unsafe_allow_html=True,
-    )
-    st.header("Três sinais conduzem à decisão")
-    st.markdown(
-        f"""
-        <div class="evidence-sheet">
-            <div class="evidence-row">
-                <div class="evidence-index">01</div>
-                <div class="evidence-copy"><strong>Compactos no Centro perdem para a melhor alternativa</strong><span>{int(center_compact["airbnb_listings"])} anúncios de short-stay e {int(center_compact["sale_listings"])} imóveis à venda na amostra</span></div>
-                <div class="evidence-value">{_percent(center_compact["net_yield_negotiated"])}<span>yield líquido vs. {_percent(assumptions.wacc_rate)} de WACC</span></div>
-                <div class="evidence-impact">O retorno está {compact_wacc_read} do WACC e fica {compact_gap_label} p.p. atrás de Morretes 2Q. A tese interna perde prioridade econômica.</div>
-            </div>
-            <div class="evidence-row">
-                <div class="evidence-index">02</div>
-                <div class="evidence-copy"><strong>Morretes 2Q compra receita por menos</strong><span>ADR de {_money(morretes_two["median_adr"])} com ticket negociado mediano de {_money(morretes_two["negotiated_purchase_price"], compact=True)}</span></div>
-                <div class="evidence-value">{_percent(morretes_two["net_yield_negotiated"])}<span>yield líquido estimado</span></div>
-                <div class="evidence-impact">O retorno {morretes_wacc_read} o WACC por {morretes_spread_label} p.p. e apresenta a melhor assimetria entre entrada e receita.</div>
-            </div>
-            <div class="evidence-row">
-                <div class="evidence-index">03</div>
-                <div class="evidence-copy"><strong>Cada bairro cumpre um papel diferente</strong><span>Retorno, equilíbrio ou escala não devem ser tratados como a mesma decisão</span></div>
-                <div class="evidence-value">2Q<span>perfil comum às três estratégias</span></div>
-                <div class="evidence-impact">Morretes lidera em retorno ({_percent(morretes_two["net_yield_negotiated"])}); Centro equilibra demanda ({_percent(center_two["net_yield_negotiated"])}); Meia Praia oferece escala ({int(meia_two["airbnb_listings"])} listings precificados).</div>
-            </div>
+        <div class="duel-card {css_class}">
+          <div class="duel-role">{escape(role)}</div>
+          <h3>{escape(_segment_name(segment))}</h3>
+          <div class="duel-metric"><span>Tarifa típica observada</span><strong>{_money(segment['observed_median_rate'])}</strong></div>
+          <div class="duel-metric"><span>Preço pedido típico</span><strong>{_money(segment['median_asking_price'], compact=True)}</strong></div>
+          <div class="duel-metric"><span>Retorno bruto de cenário</span><strong>{_percent(segment['gross_yield_scenario'])}</strong></div>
+          <div class="duel-metric"><span>Base de evidência</span><strong>{int(segment['short_stay_listings'])} + {int(segment['sale_listings'])}</strong></div>
+          {winner_tag}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def _render_viewpoint_and_audit(
-    metrics: pd.DataFrame,
-    shortlist: pd.DataFrame,
-    assumptions: InvestmentAssumptions,
-    sensitivity: pd.DataFrame,
+def _render_evidence(
+    evidence_id: str, title: str, copy: str, value: str, nature: str
 ) -> None:
     st.markdown(
-        '<div class="section-kicker">03 · Risco antes do aporte</div>',
-        unsafe_allow_html=True,
-    )
-    st.header("O retorno projetado ainda não é uma autorização de compra")
-    missing_costs = len(shortlist) - int(shortlist["property_costs_complete"].sum())
-    costs_sentence = (
-        f"{missing_costs} dos {len(shortlist)} candidatos atuais não informam "
-        "simultaneamente condomínio e IPTU."
-        if not shortlist.empty
-        else "não há candidatos nos filtros atuais para avaliar a completude dos custos."
-    )
-    st.markdown(
         f"""
-        <div class="risk-sheet">
-            <h3>O que pode enfraquecer a recomendação</h3>
-            <ul>
-                <li><strong>Demanda inferida:</strong> as datas disponíveis no Airbnb não comprovam ocupação realizada.</li>
-                <li><strong>Preço não transacionado:</strong> o VivaReal informa valor pedido; o desconto de negociação é uma premissa.</li>
-                <li><strong>Custos incompletos:</strong> {costs_sentence}</li>
-                <li><strong>Sazonalidade:</strong> uma fotografia concentrada do mercado não substitui uma série anual de reservas.</li>
-            </ul>
+        <div class="evidence">
+          <div class="evidence-id">{escape(evidence_id)}</div>
+          <div class="evidence-title">{escape(title)}</div>
+          <div class="evidence-copy">{escape(copy)}</div>
+          <div class="evidence-value">{escape(value)}<small>{escape(nature)}</small></div>
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-    with st.expander("Solicitar uma segunda leitura à IA"):
-        st.write(
-            "O auditor recebe apenas números calculados pelo motor e procura "
-            "fragilidades que devem ser verificadas antes da aquisição."
-        )
-        config = LLMConfig.from_environment()
-        if config is None:
-            st.info(
-                "Configure `LLM_API_KEY` ou `OPENAI_API_KEY` para ativar a análise."
-            )
-        if st.button(
-            "Gerar parecer do auditor",
-            disabled=config is None,
-            width="stretch",
-        ):
-            evidence = _build_ai_evidence(metrics, shortlist, assumptions, sensitivity)
-            prompt = build_auditor_prompt(evidence)
-            try:
-                with st.spinner("Auditando a tese sem recalcular os números..."):
-                    response = request_analysis(AUDITOR_SYSTEM_PROMPT, prompt, config)
-                    log_path = save_ai_log(AUDITOR_SYSTEM_PROMPT, prompt, response)
-                st.session_state["audit_response"] = response
-                st.session_state["audit_log"] = str(log_path)
-            except AIClientError as exc:
-                st.error(str(exc))
-        if "audit_response" in st.session_state:
-            st.markdown(st.session_state["audit_response"])
-            st.caption(f"Parecer registrado em `{st.session_state['audit_log']}`")
-
-
-def _render_sensitivity(sensitivity: pd.DataFrame) -> None:
-    attrs = sensitivity.attrs
-    break_even = attrs["break_even_price_change"]
-    st.subheader("A condição que pode mudar a escolha")
-    if break_even < 0:
-        break_even_label = f"{abs(break_even) * 100:.1f}".replace(".", ",")
-        message = (
-            f"No cenário atual, Morretes já lidera em retorno. O preço mediano do "
-            f"Centro precisaria cair **{break_even_label}%** para igualar "
-            "o yield de Morretes."
-        )
-    else:
-        break_even_label = f"{break_even * 100:.1f}".replace(".", ",")
-        message = (
-            f"Centro preserva a liderança até uma alta de **{break_even_label}%** "
-            "no preço de aquisição; acima disso, Morretes assume a dianteira."
-        )
-    st.markdown(message)
-
-    figure = go.Figure()
-    figure.add_trace(
-        go.Scatter(
-            x=sensitivity["price_change"] * 100,
-            y=sensitivity["target_net_yield"] * 100,
-            mode="lines",
-            name="Centro 2Q",
-            line={"color": "#087e72", "width": 4},
-            hovertemplate="Preço: %{x:+.0f}%<br>Yield: %{y:.2f}%<extra></extra>",
-        )
-    )
-    figure.add_trace(
-        go.Scatter(
-            x=sensitivity["price_change"] * 100,
-            y=sensitivity["competitor_net_yield"] * 100,
-            mode="lines",
-            name="Morretes 2Q",
-            line={"color": "#dc684f", "width": 3, "dash": "dash"},
-            hovertemplate="Yield: %{y:.2f}%<extra></extra>",
-        )
-    )
-    figure.add_vline(x=0, line_width=1, line_dash="dot", line_color="#849193")
-    if -40 <= break_even * 100 <= 40:
-        figure.add_vline(
-            x=break_even * 100,
-            line_width=2,
-            line_dash="dot",
-            line_color="#d99a2b",
-            annotation_text="Ponto de equilíbrio",
-            annotation_position="top",
-        )
-    figure.update_layout(
-        height=420,
-        margin={"l": 10, "r": 10, "t": 35, "b": 10},
-        paper_bgcolor="#f5f4ee",
-        plot_bgcolor="#fffef9",
-        hovermode="x unified",
-        legend={"orientation": "h", "y": 1.12, "x": 0},
-        xaxis_title="Variação no preço de aquisição do Centro",
-        yaxis_title="Yield líquido anual",
-        xaxis_ticksuffix="%",
-        yaxis_ticksuffix="%",
-        font={"family": "DM Sans", "color": "#102a2d"},
-    )
-    st.plotly_chart(figure, width="stretch", config={"displayModeBar": False})
-
-
-def _render_recommendation(
-    metrics: pd.DataFrame,
-    assumptions: InvestmentAssumptions,
-    sensitivity: pd.DataFrame,
-) -> None:
-    morretes = _segment(metrics, "Morretes")
-    center = _segment(metrics, "Centro")
-    break_even = abs(sensitivity.attrs["break_even_price_change"])
-    break_even_label = f"{break_even * 100:.1f}%".replace(".", ",")
-    clears_wacc = morretes["net_yield_negotiated"] >= assumptions.wacc_rate
-    recommendation_title = (
-        "Avançar a diligência em apartamentos de 2 quartos em Morretes."
-        if clears_wacc
-        else "Não aprovar uma aquisição com as premissas atuais."
-    )
-    return_read = "supera" if clears_wacc else "fica abaixo de"
-    st.markdown(
-        '<div class="section-kicker">04 · Recomendação final</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"""
-        <div class="recommendation">
-            <div class="recommendation-label">Decisão proposta ao comitê</div>
-            <h2>{recommendation_title}</h2>
-            <p>Morretes 2Q continua sendo a melhor alternativa relativa: entrega {_percent(morretes["net_yield_negotiated"])} de yield líquido estimado, {return_read} o WACC de {_percent(assumptions.wacc_rate)} e exige ticket mediano de {_money(morretes["negotiated_purchase_price"], compact=True)}.</p>
-            <div class="decision-rule"><strong>Regra para exceções:</strong> considerar Centro 2Q quando liquidez e consistência de demanda justificarem o retorno de {_percent(center["net_yield_negotiated"])}, ou quando o preço de entrada ficar aproximadamente {break_even_label} abaixo da mediana atual.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        "**Não fazer agora:** alocar o mandato principal em studios ou unidades "
-        "de 1 quarto no Centro antes que o retorno supere o custo de capital e "
-        "haja margem para custos não observados."
-    )
-
-
-def _render_shortlist(shortlist: pd.DataFrame) -> None:
-    st.markdown(
-        '<div class="section-kicker">05 · Próxima ação</div>', unsafe_allow_html=True
-    )
-    st.header("Transformar a tese em diligência")
-    st.caption(
-        "Imóveis reais aderentes ao mandato, ordenados pelo cap rate estimado. "
-        "Custos ausentes permanecem sinalizados para diligência."
-    )
-    if shortlist.empty:
-        st.warning(
-            "Nenhum imóvel atende aos filtros atuais. Amplie o preço ou os bairros."
-        )
-        return
-
-    complete_candidates = shortlist.loc[shortlist["property_costs_complete"]]
-    lead = (
-        complete_candidates.iloc[0]
-        if not complete_candidates.empty
-        else shortlist.iloc[0]
-    )
-    st.markdown(
-        f"""
-        <div class="shortlist-lead"><strong>Primeiro imóvel para diligência: ID {lead["listing_id"]}</strong><br>{lead["suburb"]} · {lead["usable_area"]:.0f} m² · {_money(lead["sale_price"])} pedidos · {_percent(lead["estimated_net_cap_rate"])} de cap rate estimado.<br><span class="microcopy">Prioridade operacional, não autorização automática de compra.</span></div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    display = shortlist.rename(
-        columns={
-            "listing_id": "ID",
-            "listing_title": "Imóvel",
-            "link_url": "Anúncio",
-            "suburb": "Bairro",
-            "usable_area": "Área",
-            "parking_spaces": "Vagas",
-            "sale_price": "Preço pedido",
-            "negotiated_purchase_price": "Preço negociado",
-            "estimated_adr": "ADR estimada",
-            "property_costs_complete": "Custos completos",
-            "estimated_net_cap_rate": "Cap rate líquido",
-        }
-    )
-    display["Cap rate líquido"] = display["Cap rate líquido"] * 100
-    st.dataframe(
-        display[
-            [
-                "ID",
-                "Imóvel",
-                "Bairro",
-                "Área",
-                "Vagas",
-                "Preço pedido",
-                "Preço negociado",
-                "ADR estimada",
-                "Cap rate líquido",
-                "Custos completos",
-                "Anúncio",
-            ]
-        ],
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "Anúncio": st.column_config.LinkColumn(
-                "Abrir anúncio", display_text="VivaReal"
-            ),
-            "Área": st.column_config.NumberColumn("Área", format="%.0f m²"),
-            "Vagas": st.column_config.NumberColumn("Vagas", format="%.0f"),
-            "Preço pedido": st.column_config.NumberColumn(
-                "Preço pedido", format="R$ %.0f"
-            ),
-            "Preço negociado": st.column_config.NumberColumn(
-                "Preço negociado", format="R$ %.0f"
-            ),
-            "ADR estimada": st.column_config.NumberColumn(
-                "ADR estimada", format="R$ %.0f"
-            ),
-            "Cap rate líquido": st.column_config.NumberColumn(
-                "Cap rate líquido", format="%.2f%%"
-            ),
-        },
-    )
-    st.caption(
-        "O cap rate exibido desconta gestão, condomínio e IPTU quando informados. "
-        "Não inclui reforma, mobiliário, manutenção extraordinária ou impostos operacionais."
     )
 
 
 def main() -> None:
     _inject_styles()
-    assumptions, selected_suburbs, max_price = _render_sidebar()
-    _render_hero()
-    if not selected_suburbs:
-        st.warning("Selecione ao menos um bairro no mandato de aquisição.")
-        st.stop()
+    st.markdown(
+        '<div class="case-bar"><span>Comitê de investimento · Caso 001</span><span>Itapema · corte de dados jan/2025</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("Contrato da decisão e premissas", expanded=False):
+        st.markdown(
+            "A decisão maximiza **retorno bruto de cenário** entre segmentos de "
+            "apartamentos com pelo menos 20 anúncios de short stay precificados "
+            "e 15 ofertas de venda válidas. A ocupação abaixo é uma premissa, não "
+            "um resultado observado."
+        )
+        occupancy = st.slider(
+            "Ocupação anual assumida para todos os segmentos",
+            min_value=30.0,
+            max_value=85.0,
+            value=62.5,
+            step=2.5,
+            format="%.1f%%",
+        )
+    if "occupancy" not in locals():
+        occupancy = 62.5
 
     try:
-        datasets = _load_data()
-        metrics = build_market_segments(datasets, assumptions)
-        sensitivity = run_sensitivity_analysis(metrics)
-        shortlist = build_acquisition_shortlist(
-            datasets,
-            metrics,
-            assumptions,
-            suburbs=selected_suburbs,
-            max_asking_price=max_price,
-        )
+        case = _build_case(occupancy / 100)
     except (FileNotFoundError, ValueError) as exc:
         st.error(f"Não foi possível construir a decisão: {exc}")
         st.stop()
 
-    _render_context(assumptions)
-    _render_conviction(metrics, assumptions)
-    _render_viewpoint_and_audit(metrics, shortlist, assumptions, sensitivity)
-    _render_sensitivity(sensitivity)
-    _render_recommendation(metrics, assumptions, sensitivity)
-    _render_shortlist(shortlist)
+    decision = case["decision"]
+    thesis = decision["thesis"]
+    challenger = decision["challenger"]
+    winner = decision["winner"]
+    reversal = decision["reversal"]
+    shortlist = case["shortlist"]
+    audit = case["audit"]
+    robustness = case["robustness"]
 
-    with st.expander("Ver evidências completas por segmento"):
-        evidence = metrics.loc[
-            metrics["suburb"].isin(STRATEGIC_SUBURBS),
+    st.markdown(
+        f"""
+        <div class="hero">
+          <div class="eyebrow">Quebre a tese</div>
+          <h1>Uma decisão que tenta provar a si mesma errada.</h1>
+          <p>A hipótese interna de compactos no Centro enfrenta o segmento mais eficiente encontrado sob o mesmo contrato. O sistema não pede confiança: expõe a evidência, procura a fragilidade e calcula o ponto de reversão.</p>
+          <div class="verdict-stamp">Tese interna · {escape(str(decision['thesis_verdict']))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _section_rule("01", "O confronto", "um critério · dois caminhos")
+    st.header("A tese interna contra o melhor desafiante elegível")
+    gap = abs(float(challenger["gross_yield_scenario"] - thesis["gross_yield_scenario"]))
+    gap_label = f"{gap * 100:.1f}".replace(".", ",")
+    st.markdown(
+        f"O desafiante é escolhido pelo motor, não pelo texto da apresentação. "
+        f"No cenário de {_percent(occupancy / 100)} de ocupação comum, "
+        f"**{escape(_segment_name(winner))}** lidera por **{gap_label} ponto(s) "
+        "percentual(is)** de retorno bruto."
+    )
+    left, right = st.columns(2, gap="medium")
+    with left:
+        _render_duel_card(thesis, "Tese interna", _segment_name(winner) == _segment_name(thesis))
+    with right:
+        _render_duel_card(
+            challenger,
+            "Desafiante calculado",
+            _segment_name(winner) == _segment_name(challenger),
+        )
+
+    _section_rule("02", "Peças de evidência", "observado ≠ calculado ≠ assumido")
+    st.header("Cada afirmação deixa uma trilha")
+    _render_evidence(
+        "E-01 · MERCADO",
+        "Tarifa anunciada",
+        f"Mediana por anúncio após manter a captura mais recente de cada data de estadia. Janela de {audit['stay_date_min']:%d/%m} a {audit['stay_date_max']:%d/%m/%Y}.",
+        f"{_money(thesis['observed_median_rate'])} vs {_money(challenger['observed_median_rate'])}",
+        "OBSERVADO · Price_AV",
+    )
+    _render_evidence(
+        "E-02 · AQUISIÇÃO",
+        "Preço pedido",
+        "Mediana de apartamentos comparáveis após remover IDs repetidos, republicações idênticas e erros evidentes de área ou preço por m².",
+        f"{_money(thesis['median_asking_price'], True)} vs {_money(challenger['median_asking_price'], True)}",
+        "OBSERVADO · VivaReal",
+    )
+    _render_evidence(
+        "E-03 · CENÁRIO",
+        "Eficiência do capital",
+        f"Tarifa típica × 365 × {_percent(occupancy / 100)} de ocupação, dividida pelo preço pedido típico. Não representa receita realizada.",
+        f"{_percent(thesis['gross_yield_scenario'])} vs {_percent(challenger['gross_yield_scenario'])}",
+        "CALCULADO + PREMISSA",
+    )
+    _render_evidence(
+        "E-04 · ROBUSTEZ",
+        "Vencedor estável",
+        "A comparação usa capturas alternativas, republicações e conflitos de bairro. Um tratamento fica inconclusivo porque a tese não alcança o corte amostral.",
+        f"{int((robustness['winner'] == _segment_name(winner)).sum())}/{int(robustness['pair_eligible'].sum())} testes elegíveis",
+        "TESTE DETERMINÍSTICO",
+    )
+
+    _section_rule("03", "Ataque mínimo", "a aplicação procura a falha")
+    st.header("Qual é a forma mais fácil de derrubar a recomendação?")
+    st.write(
+        "Em vez de esconder a incerteza atrás de uma nota de confiança, o motor "
+        "procura a menor mudança isolada que faria a tese alternativa empatar."
+    )
+    if st.button("TENTAR QUEBRAR A RECOMENDAÇÃO", type="primary"):
+        st.session_state["reveal_attack"] = True
+
+    if st.session_state.get("reveal_attack", False):
+        minimum = reversal["minimum_attack"]
+        st.markdown(
+            f"""
+            <div class="attack-shell">
+              <div class="kicker">Fragilidade encontrada</div>
+              <h3>A menor ruptura encontrada está na tarifa do vencedor.</h3>
+              <div class="attack-number">{_percent(abs(minimum['display_change']))}</div>
+              <div class="attack-label">de queda na tarifa típica de {escape(reversal['winner'])} leva a decisão ao empate.</div>
+              <div class="attack-grid">
+                <div class="attack-cell"><span>Ocupação do vencedor no empate</span><strong>{_percent(reversal['winner_occupancy_at_tie'])}</strong></div>
+                <div class="attack-cell"><span>Queda absoluta de ocupação</span><strong>{str(round(reversal['occupancy_drop_percentage_points'], 1)).replace('.', ',')} p.p.</strong></div>
+                <div class="attack-cell"><span>Preço máximo do vencedor</span><strong>{_money(reversal['winner_max_asking_price'], True)}</strong></div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Ataques de uma variável por vez. Empate não significa preferência automática pela alternativa."
+        )
+
+    _section_rule("04", "Contraditório", "objeções antes do capital")
+    st.header("O auditor não opina. Ele protocola o que falta provar.")
+    objections = [
+        (
+            "OBJ-01",
+            "Ocupação não observada",
+            "A base não contém reservas ou receita realizada. Validar histórico operacional comparável antes da compra.",
+            "ABERTA",
+            "status-open",
+        ),
+        (
+            "OBJ-02",
+            "Preço não transacionado",
+            "O VivaReal informa preço pedido. Confirmar disponibilidade, estágio da obra e margem de negociação.",
+            "ABERTA",
+            "status-open",
+        ),
+        (
+            "OBJ-03",
+            "Janela sazonal curta",
+            "As tarifas cobrem 105 dias entre verão e início da baixa temporada; anualização é apenas cenário.",
+            "PARCIAL",
+            "status-partial",
+        ),
+        (
+            "OBJ-04",
+            "Classificação de bairro",
+            f"O mesmo vencedor aparece nos {int(robustness['pair_eligible'].sum())} tratamentos elegíveis, mas a tese perde o corte amostral ao excluir divergências entre campo e URL.",
+            "PARCIAL",
+            "status-partial",
+        ),
+    ]
+    for obj_id, title, copy, status, css_class in objections:
+        st.markdown(
+            f"""
+            <div class="objection">
+              <div class="obj-id">{obj_id}</div>
+              <div class="obj-title">{escape(title)}</div>
+              <div class="obj-copy">{escape(copy)}</div>
+              <div class="{css_class}">{status}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    _section_rule("05", "Parecer", "posição explícita · aprovação condicionada")
+    verdict = str(decision["thesis_verdict"])
+    if verdict.startswith("SUSTENTADA"):
+        thesis_read = (
+            "A tese de compactos no Centro é sustentada pelo critério de "
+            "eficiência do capital no cenário-base."
+        )
+    elif verdict == "INCONCLUSIVA":
+        thesis_read = (
+            "A tese de compactos no Centro permanece inconclusiva porque os "
+            "testes não sustentam uma liderança robusta."
+        )
+    else:
+        thesis_read = (
+            "A tese de compactos no Centro não é sustentada pelo critério de "
+            "eficiência do capital no cenário-base. Isso não prova que compactos "
+            "sejam ruins; mostra que o prêmio de tarifa observado não compensa o "
+            "preço pedido típico quando comparado ao melhor desafiante elegível."
+        )
+    st.markdown(
+        f"""
+        <div class="decision-sheet">
+          <div class="kicker">Decisão proposta</div>
+          <h2>Diligenciar {escape(_segment_name(winner))}. Não autorizar a compra ainda.</h2>
+          <p>{escape(thesis_read)}</p>
+          <div class="decision-line"><span>Buy Box provisória</span><strong>{escape(_segment_name(winner))} · {winner['area_q25']:.0f} a {winner['area_q75']:.0f} m²</strong></div>
+          <div class="decision-line"><span>Preço limite comparativo</span><strong>Até {_money(reversal['winner_max_asking_price'])}</strong></div>
+          <div class="decision-line"><span>Condição para aprovar</span><strong>Validar ocupação, custos recorrentes, condição do imóvel e preço negociável.</strong></div>
+          <div class="decision-line"><span>Força da evidência</span><strong>{escape(str(decision['evidence_strength']))}: resultado estável, mas receita e transação não são observadas.</strong></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _section_rule("06", "Fila de diligência", "imóveis não são recomendações automáticas")
+    st.header("Candidatos que cabem na Buy Box")
+    st.markdown(
+        '<div class="method-note">A receita abaixo herda a tarifa típica do segmento, não uma previsão específica do imóvel. A ordenação usa menor preço pedido; custos ausentes nunca viram vantagem.</div>',
+        unsafe_allow_html=True,
+    )
+    if shortlist.empty:
+        st.warning("Nenhum anúncio atende simultaneamente à Buy Box e ao preço limite.")
+    else:
+        columns = st.columns(min(3, len(shortlist)), gap="medium")
+        for index, (_, item) in enumerate(shortlist.head(3).iterrows()):
+            with columns[index]:
+                st.markdown(
+                    f"""
+                    <div class="property-card">
+                      <div class="rank">DILIGÊNCIA {index + 1:02d}</div>
+                      <h4>{escape(str(item['listing_title']))}</h4>
+                      <div class="property-meta">{escape(str(item['suburb']))} · {item['usable_area']:.0f} m² · {item['bedrooms']:.0f} quartos · {item['parking_spaces']:.0f} vaga(s)</div>
+                      <div class="property-price">{_money(item['sale_price'])}</div>
+                      <div class="property-meta">{_percent(item['scenario_gross_yield'])} de retorno bruto no cenário</div>
+                      <div class="property-status">{escape(str(item['readiness_status']))}<br>{escape(str(item['price_data_status']))}<br>{escape(str(item['cost_data_status']))}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.link_button("Abrir anúncio original", item["link_url"], width="stretch")
+
+    with st.expander("Abrir memória técnica e evidências completas"):
+        st.markdown("#### Cobertura e qualidade")
+        st.write(
+            f"A base contém {audit['airbnb_listings']:,} anúncios Airbnb; "
+            f"{audit['priced_airbnb_listings']:,} possuem preços vinculáveis "
+            f"({_percent(audit['price_coverage'])}). Há "
+            f"{audit['repeated_listing_stay_dates']:,} pares anúncio/data recapturados; "
+            "o cenário-base mantém a captura mais recente."
+        )
+        st.markdown("#### Testes de robustez")
+        robustness_display = robustness.copy()
+        robustness_display["thesis_yield"] *= 100
+        robustness_display["challenger_yield"] *= 100
+        st.dataframe(robustness_display, hide_index=True, width="stretch")
+        st.markdown("#### Segmentos")
+        evidence = case["metrics"].loc[
+            case["metrics"]["evidence_eligible"],
             [
                 "suburb",
                 "profile",
-                "airbnb_listings",
+                "short_stay_listings",
                 "sale_listings",
-                "median_adr",
+                "price_coverage",
+                "observed_median_rate",
                 "median_asking_price",
-                "median_price_per_sqm",
-                "net_yield_asking",
-                "net_yield_negotiated",
+                "gross_yield_scenario",
             ],
         ].copy()
         st.dataframe(evidence, hide_index=True, width="stretch")
 
     st.markdown("---")
     st.caption(
-        "Seazone IDE · Snapshot de mercado, não garantia de retorno. "
-        "Toda aquisição exige diligência comercial, jurídica e operacional."
+        "Quebre a Tese · Decisão baseada no snapshot oficial. IA apoiou formulação, crítica e comunicação; nenhum número desta interface é calculado por LLM."
     )
 
 

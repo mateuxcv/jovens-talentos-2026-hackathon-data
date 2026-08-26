@@ -1,0 +1,141 @@
+{
+  "assumptions": {
+    "occupancy_rate": 0.625,
+    "days_per_year": 365,
+    "min_short_stay_listings": 20,
+    "min_sale_listings": 15,
+    "thesis_suburb": "Centro",
+    "thesis_profile": "Studio/1Q"
+  },
+  "thesis_verdict": "NÃO SUSTENTADA",
+  "decision_status": "DILIGENCIAR, NÃO COMPRAR",
+  "evidence_strength": "LIMITADA",
+  "robust_same_winner": true,
+  "robust_evidence_complete": false,
+  "thesis": {
+    "suburb": "Centro",
+    "profile": "Studio/1Q",
+    "observed_median_rate": 445.0,
+    "rate_q25": 376.25,
+    "rate_q75": 523.999975,
+    "short_stay_listings": 78.0,
+    "median_observed_dates": 77.0,
+    "short_stay_universe": 118.0,
+    "price_coverage": 0.6610169491525424,
+    "median_asking_price": 890000.0,
+    "asking_price_q25": 625000.0,
+    "asking_price_q75": 970000.0,
+    "median_price_per_sqm": 19904.761904761905,
+    "median_usable_area": 42.0,
+    "area_q25": 37.5,
+    "area_q75": 61.0,
+    "sale_listings": 19.0,
+    "scenario_occupied_nights": 228.125,
+    "annualized_gross_revenue_scenario": 101515.625,
+    "gross_yield_scenario": 0.1140625,
+    "evidence_eligible": true
+  },
+  "challenger": {
+    "suburb": "Morretes",
+    "profile": "2Q",
+    "observed_median_rate": 464.0,
+    "rate_q25": 350.0,
+    "rate_q75": 559.25,
+    "short_stay_listings": 51.0,
+    "median_observed_dates": 62.0,
+    "short_stay_universe": 229.0,
+    "price_coverage": 0.22270742358078602,
+    "median_asking_price": 790000.0,
+    "asking_price_q25": 684750.0,
+    "asking_price_q75": 889450.0,
+    "median_price_per_sqm": 11706.634963768116,
+    "median_usable_area": 69.0,
+    "area_q25": 65.0,
+    "area_q75": 70.0,
+    "sale_listings": 892.0,
+    "scenario_occupied_nights": 228.125,
+    "annualized_gross_revenue_scenario": 105850.0,
+    "gross_yield_scenario": 0.1339873417721519,
+    "evidence_eligible": true
+  },
+  "winner": {
+    "suburb": "Morretes",
+    "profile": "2Q",
+    "observed_median_rate": 464.0,
+    "rate_q25": 350.0,
+    "rate_q75": 559.25,
+    "short_stay_listings": 51.0,
+    "median_observed_dates": 62.0,
+    "short_stay_universe": 229.0,
+    "price_coverage": 0.22270742358078602,
+    "median_asking_price": 790000.0,
+    "asking_price_q25": 684750.0,
+    "asking_price_q75": 889450.0,
+    "median_price_per_sqm": 11706.634963768116,
+    "median_usable_area": 69.0,
+    "area_q25": 65.0,
+    "area_q75": 70.0,
+    "sale_listings": 892.0,
+    "scenario_occupied_nights": 228.125,
+    "annualized_gross_revenue_scenario": 105850.0,
+    "gross_yield_scenario": 0.1339873417721519,
+    "evidence_eligible": true
+  },
+  "reversal": {
+    "winner": "Morretes · 2Q",
+    "runner_up": "Centro · Studio/1Q",
+    "minimum_attack": {
+      "variable": "Tarifa do vencedor",
+      "direction": "queda",
+      "relative_change": -0.1487068965517242,
+      "display_change": -0.1487068965517242,
+      "magnitude": 0.1487068965517242
+    },
+    "attacks": [
+      {
+        "variable": "Tarifa do vencedor",
+        "direction": "queda",
+        "relative_change": -0.1487068965517242,
+        "display_change": -0.1487068965517242,
+        "magnitude": 0.1487068965517242
+      },
+      {
+        "variable": "Preço da tese alternativa",
+        "direction": "queda",
+        "relative_change": -0.1487068965517242,
+        "display_change": -0.1487068965517242,
+        "magnitude": 0.1487068965517242
+      },
+      {
+        "variable": "Preço do vencedor",
+        "direction": "alta",
+        "relative_change": 0.1746835443037975,
+        "display_change": 0.1746835443037975,
+        "magnitude": 0.1746835443037975
+      },
+      {
+        "variable": "Tarifa da tese alternativa",
+        "direction": "alta",
+        "relative_change": 0.1746835443037975,
+        "display_change": 0.1746835443037975,
+        "magnitude": 0.1746835443037975
+      }
+    ],
+    "winner_occupancy_at_tie": 0.5320581896551724,
+    "occupancy_drop_percentage_points": 9.294181034482762,
+    "winner_max_asking_price": 928000.0,
+    "runner_max_asking_price": 757650.8620689654
+  },
+  "audit": {
+    "airbnb_listings": 4441,
+    "priced_airbnb_listings": 999,
+    "price_coverage": 0.22494933573519477,
+    "price_rows": 118839,
+    "unique_listing_stay_dates": 59040,
+    "repeated_listing_stay_dates": 33588,
+    "stay_date_min": "2025-01-06T00:00:00",
+    "stay_date_max": "2025-04-20T00:00:00",
+    "sale_offers_raw": 8329,
+    "sale_offers_clean": 6994
+  }
+}

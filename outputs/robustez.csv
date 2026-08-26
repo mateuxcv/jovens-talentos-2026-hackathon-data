@@ -1,0 +1,5 @@
+test,winner,challenger,thesis_yield,challenger_yield,gap_percentage_points,pair_eligible
+Base,Morretes · 2Q,Morretes · 2Q,0.1140625,0.1339873417721519,1.992484177215191,True
+Primeira captura,Morretes · 2Q,Morretes · 2Q,0.11425474016853933,0.13571993670886076,2.146519654032143,True
+Sem deduplicação de conteúdo,Morretes · 2Q,Morretes · 2Q,0.1140625,0.1339873417721519,1.992484177215191,True
+Somente bairros consistentes com a URL,,Morretes · 2Q,0.1281762941919192,0.1339873417721519,0.5811047580232709,False

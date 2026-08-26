@@ -1,8 +1,8 @@
-"""Deterministic investment calculations for the Itapema market.
+"""Deterministic evidence and decision rules for the Itapema case.
 
-This module is the numeric source of truth for the application. It keeps raw
-market evidence separate from operating assumptions and never delegates a
-calculation to the AI layer.
+The module deliberately separates observations from scenarios. Airbnb prices
+are advertised nightly rates, VivaReal prices are asking prices, and occupancy
+is an explicit user assumption. No LLM participates in these calculations.
 """
 
 from __future__ import annotations
@@ -26,16 +26,14 @@ DATA_FILES = {
 REQUIRED_COLUMNS = {
     "details": {
         "airbnb_listing_id",
+        "listing_type",
         "number_of_bedrooms",
-        "number_of_guests",
-        "amenities",
-        "can_instant_book",
-        "guest_satisfaction_overall",
         "owner_id",
+        "aquisition_date",
     },
     "prices": {"airbnb_listing_id", "date", "price", "aquisition_date"},
     "hosts": {"owner_id", "host_snapshot_date"},
-    "mesh": {"airbnb_listing_id", "suburb"},
+    "mesh": {"airbnb_listing_id", "suburb", "aquisition_date"},
     "vivareal": {
         "listing_id",
         "link_url",
@@ -48,17 +46,13 @@ REQUIRED_COLUMNS = {
         "bedrooms",
         "parking_spaces",
         "suburb",
+        "advertiser_name",
         "aquisition_date",
     },
 }
 
 NUMERIC_COLUMNS = {
-    "details": [
-        "number_of_bedrooms",
-        "number_of_guests",
-        "number_of_reviews",
-        "guest_satisfaction_overall",
-    ],
+    "details": ["number_of_bedrooms", "number_of_guests"],
     "prices": ["price"],
     "vivareal": [
         "sale_price",
@@ -70,33 +64,42 @@ NUMERIC_COLUMNS = {
     ],
 }
 
+SALE_BASE_SIGNATURE = [
+    "_listing_title_key",
+    "suburb",
+    "bedrooms",
+    "usable_area",
+    "advertiser_name",
+]
+SALE_SIGNATURE = [*SALE_BASE_SIGNATURE, "_price_cluster"]
+
 
 @dataclass(frozen=True)
-class InvestmentAssumptions:
-    """Operating assumptions controlled by the executive UI."""
+class DecisionAssumptions:
+    """Scenario assumptions and evidence gates defined before ranking."""
 
-    management_fee_rate: float = 0.20
-    wacc_rate: float = 0.10
-    negotiation_discount_rate: float = 0.05
-    vacancy_rate: float = 0.375
+    occupancy_rate: float = 0.625
     days_per_year: int = 365
+    min_short_stay_listings: int = 20
+    min_sale_listings: int = 15
+    thesis_suburb: str = "Centro"
+    thesis_profile: str = "Studio/1Q"
 
     def __post_init__(self) -> None:
-        for name in (
-            "management_fee_rate",
-            "wacc_rate",
-            "negotiation_discount_rate",
-            "vacancy_rate",
-        ):
-            value = getattr(self, name)
-            if not 0 <= value < 1:
-                raise ValueError(f"{name} must be between 0 (inclusive) and 1")
+        if not 0 < self.occupancy_rate <= 1:
+            raise ValueError("occupancy_rate must be greater than 0 and at most 1")
         if self.days_per_year <= 0:
             raise ValueError("days_per_year must be positive")
+        if self.min_short_stay_listings <= 0 or self.min_sale_listings <= 0:
+            raise ValueError("sample gates must be positive")
+
+
+# Compatibility alias for earlier imports and notebooks.
+InvestmentAssumptions = DecisionAssumptions
 
 
 def load_datasets(data_dir: str | Path) -> dict[str, pd.DataFrame]:
-    """Load the five official CSV files and validate their input schemas."""
+    """Load the five official files while preserving long IDs as strings."""
 
     data_path = Path(data_dir)
     if not data_path.is_dir():
@@ -129,14 +132,13 @@ def load_datasets(data_dir: str | Path) -> dict[str, pd.DataFrame]:
 def normalize_datasets(
     datasets: Mapping[str, pd.DataFrame],
 ) -> dict[str, pd.DataFrame]:
-    """Return normalized copies while preserving every raw source file."""
+    """Normalize types and labels without mutating the source frames."""
 
     missing_datasets = set(DATA_FILES) - set(datasets)
     if missing_datasets:
         raise ValueError(f"Missing datasets: {sorted(missing_datasets)}")
 
     normalized = {name: frame.copy() for name, frame in datasets.items()}
-
     for name, columns in NUMERIC_COLUMNS.items():
         for column in columns:
             if column in normalized[name]:
@@ -154,57 +156,69 @@ def normalize_datasets(
         for column in id_columns:
             normalized[name][column] = normalized[name][column].astype("string")
 
-    normalized["details"]["can_instant_book"] = _to_nullable_boolean(
-        normalized["details"]["can_instant_book"]
-    )
     for name, column in (
+        ("details", "aquisition_date"),
         ("prices", "date"),
         ("prices", "aquisition_date"),
         ("hosts", "host_snapshot_date"),
+        ("mesh", "aquisition_date"),
         ("vivareal", "aquisition_date"),
     ):
         normalized[name][column] = pd.to_datetime(
             normalized[name][column], errors="coerce"
         )
 
-    normalized["mesh"]["suburb"] = normalized["mesh"]["suburb"].map(_normalize_suburb)
+    normalized["details"]["listing_type"] = normalized["details"][
+        "listing_type"
+    ].map(_ascii_lower)
+    normalized["vivareal"]["listing_type"] = normalized["vivareal"][
+        "listing_type"
+    ].map(_ascii_lower)
+    normalized["mesh"]["suburb"] = normalized["mesh"]["suburb"].map(
+        _normalize_suburb
+    )
     normalized["vivareal"]["suburb"] = normalized["vivareal"]["suburb"].map(
         _normalize_suburb
     )
-    normalized["vivareal"]["listing_type"] = (
-        normalized["vivareal"]["listing_type"].astype("string").str.lower().str.strip()
-    )
 
-    # VivaReal and hosts contain repeated snapshots. Keep the newest evidence.
-    normalized["vivareal"] = _keep_latest(
-        normalized["vivareal"], "listing_id", "aquisition_date"
-    )
     normalized["hosts"] = _keep_latest(
         normalized["hosts"], "owner_id", "host_snapshot_date"
+    )
+    normalized["vivareal"] = _keep_latest(
+        normalized["vivareal"], "listing_id", "aquisition_date"
     )
     return normalized
 
 
-def build_market_segments(
-    datasets: Mapping[str, pd.DataFrame],
-    assumptions: InvestmentAssumptions | None = None,
+def prepare_short_stay_listings(
+    datasets: Mapping[str, pd.DataFrame], price_version: str = "latest"
 ) -> pd.DataFrame:
-    """Build one comparable row per neighborhood and bedroom profile.
+    """Return comparable apartment listings with one advertised-rate summary.
 
-    Airbnb prices are first reduced to one median ADR per listing. This avoids
-    giving more weight to listings with more captured dates.
+    Repeated observations for the same listing and stay date are snapshots, not
+    independent nights. The base case keeps the latest captured price.
     """
 
-    assumptions = assumptions or InvestmentAssumptions()
     frames = normalize_datasets(datasets)
+    prices = frames["prices"].loc[frames["prices"]["price"] > 0].copy()
+    if price_version in {"latest", "earliest"}:
+        prices = prices.sort_values("aquisition_date").drop_duplicates(
+            ["airbnb_listing_id", "date"],
+            keep="last" if price_version == "latest" else "first",
+        )
+    elif price_version != "all":
+        raise ValueError("price_version must be 'latest', 'earliest' or 'all'")
 
-    listing_adr = (
-        frames["prices"]
-        .loc[frames["prices"]["price"] > 0]
-        .groupby("airbnb_listing_id", as_index=False)
-        .agg(median_adr=("price", "median"), observed_nights=("price", "size"))
+    listing_rates = (
+        prices.groupby("airbnb_listing_id", as_index=False)
+        .agg(
+            observed_median_rate=("price", "median"),
+            observed_stay_dates=("date", "nunique"),
+            first_stay_date=("date", "min"),
+            last_stay_date=("date", "max"),
+        )
     )
-    airbnb = (
+    listings = (
         frames["details"]
         .merge(
             frames["mesh"][["airbnb_listing_id", "suburb"]],
@@ -212,246 +226,422 @@ def build_market_segments(
             how="inner",
             validate="one_to_one",
         )
-        .merge(listing_adr, on="airbnb_listing_id", how="inner", validate="one_to_one")
+        .merge(
+            listing_rates,
+            on="airbnb_listing_id",
+            how="inner",
+            validate="one_to_one",
+        )
     )
-    airbnb = airbnb.loc[
-        airbnb["suburb"].notna() & airbnb["number_of_bedrooms"].notna()
+    listings = listings.loc[
+        (listings["listing_type"] == "apartamento")
+        & listings["suburb"].notna()
+        & listings["number_of_bedrooms"].notna()
     ].copy()
-    airbnb["profile"] = airbnb["number_of_bedrooms"].map(_bedroom_profile)
-    amenities = airbnb["amenities"].fillna("").map(_ascii_lower)
-    airbnb["has_air_conditioning"] = amenities.str.contains("ar-condicionado")
-    airbnb["has_parking"] = amenities.str.contains("estacionamento")
-    airbnb["valid_guest_rating"] = airbnb["guest_satisfaction_overall"].where(
-        airbnb["guest_satisfaction_overall"] > 0
+    listings["profile"] = listings["number_of_bedrooms"].map(_bedroom_profile)
+    return listings
+
+
+def prepare_sale_listings(
+    datasets: Mapping[str, pd.DataFrame],
+    deduplicate_content: bool = True,
+    location_policy: str = "field",
+) -> pd.DataFrame:
+    """Return plausible residential apartment offers from VivaReal.
+
+    Fixed plausibility bounds remove obvious unit and typing errors. They are
+    deliberately broad and do not select a preferred neighborhood or profile.
+    """
+
+    frames = normalize_datasets(datasets)
+    sales = frames["vivareal"].loc[
+        (frames["vivareal"]["listing_type"] == "apartamento")
+        & frames["vivareal"]["sale_price"].between(100_000, 20_000_000)
+        & frames["vivareal"]["usable_area"].between(15, 500)
+        & frames["vivareal"]["bedrooms"].notna()
+        & frames["vivareal"]["suburb"].notna()
+    ].copy()
+    sales["asking_price_per_sqm"] = sales["sale_price"] / sales["usable_area"]
+    sales = sales.loc[sales["asking_price_per_sqm"].between(3_000, 50_000)].copy()
+    sales["_listing_title_key"] = sales["listing_title"].map(_ascii_lower)
+    sales["url_suburb"] = sales["link_url"].map(_suburb_from_url)
+    sales["location_conflict"] = sales["url_suburb"].notna() & (
+        sales["url_suburb"] != sales["suburb"]
+    )
+    if location_policy == "consistent":
+        sales = sales.loc[~sales["location_conflict"]].copy()
+    elif location_policy != "field":
+        raise ValueError("location_policy must be 'field' or 'consistent'")
+    if deduplicate_content:
+        sales = sales.sort_values([*SALE_BASE_SIGNATURE, "sale_price"])
+        price_gap = sales.groupby(SALE_BASE_SIGNATURE, dropna=False)[
+            "sale_price"
+        ].diff()
+        sales["_price_cluster"] = (
+            price_gap.gt(1_000)
+            .groupby([sales[column] for column in SALE_BASE_SIGNATURE], dropna=False)
+            .cumsum()
+        )
+        sales = sales.sort_values("aquisition_date").drop_duplicates(
+            SALE_SIGNATURE, keep="last"
+        )
+    else:
+        sales["_price_cluster"] = np.arange(len(sales))
+    sales["profile"] = sales["bedrooms"].map(_bedroom_profile)
+    return sales.reset_index(drop=True)
+
+
+def build_market_segments(
+    datasets: Mapping[str, pd.DataFrame],
+    assumptions: DecisionAssumptions | None = None,
+    *,
+    price_version: str = "latest",
+    deduplicate_sales_content: bool = True,
+    sale_location_policy: str = "field",
+) -> pd.DataFrame:
+    """Build one comparable row per neighborhood and bedroom profile."""
+
+    assumptions = assumptions or DecisionAssumptions()
+    frames = normalize_datasets(datasets)
+    short_stay = prepare_short_stay_listings(datasets, price_version=price_version)
+    sales = prepare_sale_listings(
+        datasets,
+        deduplicate_content=deduplicate_sales_content,
+        location_policy=sale_location_policy,
     )
 
-    airbnb_segments = (
-        airbnb.groupby(["suburb", "profile"], observed=True)
-        .agg(
-            median_adr=("median_adr", "median"),
-            airbnb_listings=("airbnb_listing_id", "nunique"),
-            median_guests=("number_of_guests", "median"),
-            median_guest_rating=("valid_guest_rating", "median"),
-            instant_book_share=("can_instant_book", "mean"),
-            air_conditioning_share=("has_air_conditioning", "mean"),
-            parking_share=("has_parking", "mean"),
+    apartment_universe = (
+        frames["details"]
+        .loc[
+            (frames["details"]["listing_type"] == "apartamento")
+            & frames["details"]["number_of_bedrooms"].notna()
+        ]
+        .merge(
+            frames["mesh"][["airbnb_listing_id", "suburb"]],
+            on="airbnb_listing_id",
+            how="inner",
+            validate="one_to_one",
         )
+    )
+    apartment_universe["profile"] = apartment_universe["number_of_bedrooms"].map(
+        _bedroom_profile
+    )
+    universe_counts = (
+        apartment_universe.groupby(["suburb", "profile"], observed=True)
+        .agg(short_stay_universe=("airbnb_listing_id", "nunique"))
         .reset_index()
     )
 
-    sales = (
-        frames["vivareal"]
-        .loc[
-            (frames["vivareal"]["listing_type"] == "apartamento")
-            & (frames["vivareal"]["sale_price"] > 0)
-            & (frames["vivareal"]["usable_area"] > 0)
-            & frames["vivareal"]["bedrooms"].notna()
-            & frames["vivareal"]["suburb"].notna()
-        ]
-        .copy()
+    short_segments = (
+        short_stay.groupby(["suburb", "profile"], observed=True)
+        .agg(
+            observed_median_rate=("observed_median_rate", "median"),
+            rate_q25=("observed_median_rate", lambda values: values.quantile(0.25)),
+            rate_q75=("observed_median_rate", lambda values: values.quantile(0.75)),
+            short_stay_listings=("airbnb_listing_id", "nunique"),
+            median_observed_dates=("observed_stay_dates", "median"),
+        )
+        .reset_index()
+        .merge(universe_counts, on=["suburb", "profile"], how="left")
     )
-    sales["profile"] = sales["bedrooms"].map(_bedroom_profile)
-    sales["asking_price_per_sqm"] = sales["sale_price"] / sales["usable_area"]
+    short_segments["price_coverage"] = _safe_divide(
+        short_segments["short_stay_listings"],
+        short_segments["short_stay_universe"],
+    )
+
     sale_segments = (
         sales.groupby(["suburb", "profile"], observed=True)
         .agg(
             median_asking_price=("sale_price", "median"),
+            asking_price_q25=("sale_price", lambda values: values.quantile(0.25)),
+            asking_price_q75=("sale_price", lambda values: values.quantile(0.75)),
             median_price_per_sqm=("asking_price_per_sqm", "median"),
             median_usable_area=("usable_area", "median"),
+            area_q25=("usable_area", lambda values: values.quantile(0.25)),
+            area_q75=("usable_area", lambda values: values.quantile(0.75)),
             sale_listings=("listing_id", "nunique"),
         )
         .reset_index()
     )
 
-    segments = airbnb_segments.merge(
+    segments = short_segments.merge(
         sale_segments, on=["suburb", "profile"], how="outer", validate="one_to_one"
     )
-    return calculate_investment_metrics(segments, assumptions)
+    return calculate_scenario_metrics(segments, assumptions)
 
 
-def calculate_investment_metrics(
-    segments: pd.DataFrame,
-    assumptions: InvestmentAssumptions | None = None,
+def calculate_scenario_metrics(
+    segments: pd.DataFrame, assumptions: DecisionAssumptions | None = None
 ) -> pd.DataFrame:
-    """Apply transparent revenue, yield, negotiated-price and WACC formulas."""
+    """Apply the explicit occupancy scenario without calling it observed revenue."""
 
-    assumptions = assumptions or InvestmentAssumptions()
-    required = {"median_adr", "median_asking_price"}
+    assumptions = assumptions or DecisionAssumptions()
+    required = {"observed_median_rate", "median_asking_price"}
     missing = required - set(segments.columns)
     if missing:
         raise ValueError(f"Segments are missing columns: {sorted(missing)}")
 
     result = segments.copy()
-    result["projected_occupied_nights"] = assumptions.days_per_year * (
-        1 - assumptions.vacancy_rate
+    result["scenario_occupied_nights"] = (
+        assumptions.days_per_year * assumptions.occupancy_rate
     )
-    result["annual_gross_revenue"] = (
-        result["median_adr"] * result["projected_occupied_nights"]
+    result["annualized_gross_revenue_scenario"] = (
+        result["observed_median_rate"] * result["scenario_occupied_nights"]
     )
-    result["annual_noi_before_property_costs"] = result["annual_gross_revenue"] * (
-        1 - assumptions.management_fee_rate
+    result["gross_yield_scenario"] = _safe_divide(
+        result["annualized_gross_revenue_scenario"], result["median_asking_price"]
     )
-    result["negotiated_purchase_price"] = result["median_asking_price"] * (
-        1 - assumptions.negotiation_discount_rate
-    )
-    result["gross_yield_asking"] = _safe_divide(
-        result["annual_gross_revenue"], result["median_asking_price"]
-    )
-    result["net_yield_asking"] = _safe_divide(
-        result["annual_noi_before_property_costs"], result["median_asking_price"]
-    )
-    result["net_yield_negotiated"] = _safe_divide(
-        result["annual_noi_before_property_costs"], result["negotiated_purchase_price"]
-    )
-    result["wacc_spread_asking"] = result["net_yield_asking"] - assumptions.wacc_rate
-    result["wacc_spread_negotiated"] = (
-        result["net_yield_negotiated"] - assumptions.wacc_rate
-    )
+    result["evidence_eligible"] = (
+        result["short_stay_listings"].fillna(0)
+        >= assumptions.min_short_stay_listings
+    ) & (result["sale_listings"].fillna(0) >= assumptions.min_sale_listings)
     return result.sort_values(["suburb", "profile"], ignore_index=True)
 
 
-def run_sensitivity_analysis(
+def build_decision(
     metrics: pd.DataFrame,
-    target_suburb: str = "Centro",
-    competitor_suburb: str = "Morretes",
-    profile: str = "2Q",
-    min_price_change: float = -0.40,
-    max_price_change: float = 0.40,
-    steps: int = 81,
-) -> pd.DataFrame:
-    """Compare target yield as its acquisition price changes against a peer.
+    assumptions: DecisionAssumptions | None = None,
+    robustness: pd.DataFrame | None = None,
+) -> dict[str, object]:
+    """Compare the internal thesis with the strongest eligible alternative."""
 
-    Metadata in ``result.attrs`` includes the exact break-even price change.
-    A negative break-even means the target is already less profitable and its
-    price would need to fall to match the competitor.
-    """
+    assumptions = assumptions or DecisionAssumptions()
+    thesis = _select_segment(
+        metrics, _normalize_suburb(assumptions.thesis_suburb), assumptions.thesis_profile
+    )
+    eligible = metrics.loc[
+        metrics["evidence_eligible"] & metrics["gross_yield_scenario"].notna()
+    ].copy()
+    if eligible.empty:
+        raise ValueError("No segment passes the evidence gates")
 
-    if min_price_change <= -1 or max_price_change <= min_price_change:
-        raise ValueError("Invalid sensitivity price range")
-    if steps < 2:
-        raise ValueError("steps must be at least 2")
-
-    target_name = _normalize_suburb(target_suburb)
-    competitor_name = _normalize_suburb(competitor_suburb)
-    target = _select_segment(metrics, target_name, profile)
-    competitor = _select_segment(metrics, competitor_name, profile)
-    required_values = [
-        target["median_asking_price"],
-        target["annual_noi_before_property_costs"],
-        competitor["net_yield_asking"],
+    alternatives = eligible.loc[
+        ~(
+            (eligible["suburb"] == thesis["suburb"])
+            & (eligible["profile"] == thesis["profile"])
+        )
     ]
-    if any(pd.isna(value) or value <= 0 for value in required_values):
-        raise ValueError("Selected segments do not have enough data for sensitivity")
+    if alternatives.empty:
+        raise ValueError("No eligible challenger was found")
+    challenger = alternatives.sort_values(
+        ["gross_yield_scenario", "short_stay_listings", "sale_listings"],
+        ascending=[False, False, False],
+    ).iloc[0]
 
-    changes = np.linspace(min_price_change, max_price_change, steps)
-    target_prices = target["median_asking_price"] * (1 + changes)
-    target_yields = target["annual_noi_before_property_costs"] / target_prices
-    competitor_yield = float(competitor["net_yield_asking"])
-    result = pd.DataFrame(
+    thesis_wins = bool(
+        thesis["evidence_eligible"]
+        and thesis["gross_yield_scenario"] >= challenger["gross_yield_scenario"]
+    )
+    winner = thesis if thesis_wins else challenger
+    runner_up = challenger if thesis_wins else thesis
+
+    robust_same_winner = None
+    robust_evidence_complete = None
+    if robustness is not None and not robustness.empty:
+        expected = _segment_key(winner)
+        eligible_tests = robustness.loc[robustness["pair_eligible"]]
+        robust_same_winner = bool(
+            not eligible_tests.empty
+            and (eligible_tests["winner"] == expected).all()
+        )
+        robust_evidence_complete = bool(robustness["pair_eligible"].all())
+
+    if not bool(thesis["evidence_eligible"]):
+        thesis_verdict = "INCONCLUSIVA"
+    elif thesis_wins and robust_same_winner is False:
+        thesis_verdict = "SUSTENTADA COM RESSALVAS"
+    elif thesis_wins:
+        thesis_verdict = "SUSTENTADA"
+    elif robust_same_winner is False:
+        thesis_verdict = "INCONCLUSIVA"
+    else:
+        thesis_verdict = "NÃO SUSTENTADA"
+
+    reversal = find_minimum_reversal(winner, runner_up, assumptions)
+    minimum_coverage = min(
+        float(thesis["price_coverage"]), float(challenger["price_coverage"])
+    )
+    return {
+        "thesis": thesis,
+        "challenger": challenger,
+        "winner": winner,
+        "runner_up": runner_up,
+        "thesis_verdict": thesis_verdict,
+        "robust_same_winner": robust_same_winner,
+        "robust_evidence_complete": robust_evidence_complete,
+        "reversal": reversal,
+        "decision_status": "DILIGENCIAR, NÃO COMPRAR",
+        "evidence_strength": "LIMITADA" if minimum_coverage < 0.30 else "MODERADA",
+    }
+
+
+def run_robustness_checks(
+    datasets: Mapping[str, pd.DataFrame],
+    assumptions: DecisionAssumptions | None = None,
+) -> pd.DataFrame:
+    """Re-run the decision under three defensible data treatments."""
+
+    assumptions = assumptions or DecisionAssumptions()
+    variants = [
+        ("Base", "latest", True, "field"),
+        ("Primeira captura", "earliest", True, "field"),
+        ("Sem deduplicação de conteúdo", "latest", False, "field"),
+        ("Somente bairros consistentes com a URL", "latest", True, "consistent"),
+    ]
+    rows: list[dict[str, object]] = []
+    for label, price_version, deduplicate_sales, location_policy in variants:
+        metrics = build_market_segments(
+            datasets,
+            assumptions,
+            price_version=price_version,
+            deduplicate_sales_content=deduplicate_sales,
+            sale_location_policy=location_policy,
+        )
+        decision = build_decision(metrics, assumptions)
+        thesis = decision["thesis"]
+        challenger = decision["challenger"]
+        pair_eligible = bool(
+            thesis["evidence_eligible"] & challenger["evidence_eligible"]
+        )
+        winner = decision["winner"] if pair_eligible else None
+        rows.append(
+            {
+                "test": label,
+                "winner": _segment_key(winner) if winner is not None else None,
+                "challenger": _segment_key(challenger),
+                "thesis_yield": float(thesis["gross_yield_scenario"]),
+                "challenger_yield": float(challenger["gross_yield_scenario"]),
+                "gap_percentage_points": float(
+                    (challenger["gross_yield_scenario"] - thesis["gross_yield_scenario"])
+                    * 100
+                ),
+                "pair_eligible": pair_eligible,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def find_minimum_reversal(
+    winner: pd.Series,
+    runner_up: pd.Series,
+    assumptions: DecisionAssumptions | None = None,
+) -> dict[str, object]:
+    """Find the smallest one-variable shock that makes the runner-up tie."""
+
+    assumptions = assumptions or DecisionAssumptions()
+    winner_yield = float(winner["gross_yield_scenario"])
+    runner_yield = float(runner_up["gross_yield_scenario"])
+    if winner_yield <= 0 or runner_yield <= 0 or winner_yield < runner_yield:
+        raise ValueError("winner and runner-up are invalid or out of order")
+
+    yield_ratio = runner_yield / winner_yield
+    inverse_ratio = winner_yield / runner_yield
+    attacks = [
         {
-            "price_change": changes,
-            "target_purchase_price": target_prices,
-            "target_net_yield": target_yields,
-            "competitor_net_yield": competitor_yield,
-            "leader": np.where(
-                target_yields >= competitor_yield, target_name, competitor_name
-            ),
-        }
-    )
-    break_even_multiplier = (
-        target["annual_noi_before_property_costs"]
-        / competitor_yield
-        / target["median_asking_price"]
-    )
-    result.attrs.update(
+            "variable": "Tarifa do vencedor",
+            "direction": "queda",
+            "relative_change": yield_ratio - 1,
+            "display_change": -(1 - yield_ratio),
+        },
         {
-            "target_suburb": target_name,
-            "competitor_suburb": competitor_name,
-            "profile": profile,
-            "break_even_price_change": float(break_even_multiplier - 1),
-            "current_leader": (
-                target_name
-                if target["net_yield_asking"] >= competitor_yield
-                else competitor_name
-            ),
-        }
-    )
-    return result
+            "variable": "Preço do vencedor",
+            "direction": "alta",
+            "relative_change": inverse_ratio - 1,
+            "display_change": inverse_ratio - 1,
+        },
+        {
+            "variable": "Tarifa da tese alternativa",
+            "direction": "alta",
+            "relative_change": inverse_ratio - 1,
+            "display_change": inverse_ratio - 1,
+        },
+        {
+            "variable": "Preço da tese alternativa",
+            "direction": "queda",
+            "relative_change": yield_ratio - 1,
+            "display_change": -(1 - yield_ratio),
+        },
+    ]
+    for attack in attacks:
+        attack["magnitude"] = abs(float(attack["relative_change"]))
+    attacks.sort(key=lambda attack: attack["magnitude"])
+
+    winner_occupancy_at_tie = assumptions.occupancy_rate * yield_ratio
+    return {
+        "winner": _segment_key(winner),
+        "runner_up": _segment_key(runner_up),
+        "minimum_attack": attacks[0],
+        "attacks": attacks,
+        "winner_occupancy_at_tie": winner_occupancy_at_tie,
+        "occupancy_drop_percentage_points": (
+            assumptions.occupancy_rate - winner_occupancy_at_tie
+        )
+        * 100,
+        "winner_max_asking_price": float(
+            winner["annualized_gross_revenue_scenario"] / runner_yield
+        ),
+        "runner_max_asking_price": float(
+            runner_up["annualized_gross_revenue_scenario"] / winner_yield
+        ),
+    }
 
 
 def build_acquisition_shortlist(
     datasets: Mapping[str, pd.DataFrame],
-    metrics: pd.DataFrame,
-    assumptions: InvestmentAssumptions | None = None,
-    suburbs: tuple[str, ...] = ("Centro", "Morretes"),
-    bedrooms: int = 2,
-    min_area: float = 60,
-    max_area: float = 85,
-    max_asking_price: float = 950_000,
+    decision: Mapping[str, object],
+    assumptions: DecisionAssumptions | None = None,
     limit: int = 5,
 ) -> pd.DataFrame:
-    """Rank real VivaReal listings that fit the acquisition mandate.
+    """Select offers for diligence; this function never authorizes a purchase."""
 
-    Missing condo or IPTU values are conservatively exposed through
-    ``property_costs_complete`` instead of being hidden from the decision.
-    They are treated as zero only for the displayed estimate.
-    """
-
-    assumptions = assumptions or InvestmentAssumptions()
+    assumptions = assumptions or DecisionAssumptions()
     if limit <= 0:
         raise ValueError("limit must be positive")
-    if min_area <= 0 or max_area < min_area or max_asking_price <= 0:
-        raise ValueError("Invalid shortlist filters")
+    winner = decision["winner"]
+    reversal = decision["reversal"]
+    sales = prepare_sale_listings(datasets, location_policy="consistent")
 
-    frames = normalize_datasets(datasets)
-    sales = frames["vivareal"].copy()
-    normalized_suburbs = {_normalize_suburb(value) for value in suburbs}
     candidates = sales.loc[
-        (sales["listing_type"] == "apartamento")
-        & sales["suburb"].isin(normalized_suburbs)
-        & (sales["bedrooms"] == bedrooms)
-        & sales["usable_area"].between(min_area, max_area, inclusive="both")
-        & sales["sale_price"].between(1, max_asking_price, inclusive="both")
+        (sales["suburb"] == winner["suburb"])
+        & (sales["profile"] == winner["profile"])
+        & sales["usable_area"].between(
+            winner["area_q25"], winner["area_q75"], inclusive="both"
+        )
+        & (sales["sale_price"] <= reversal["winner_max_asking_price"])
     ].copy()
     if candidates.empty:
         return _empty_shortlist()
 
-    profile = _bedroom_profile(float(bedrooms))
-    adr_map = (
-        metrics.loc[metrics["profile"] == profile, ["suburb", "median_adr"]]
-        .dropna()
-        .set_index("suburb")["median_adr"]
+    candidates["scenario_gross_revenue"] = float(
+        winner["annualized_gross_revenue_scenario"]
     )
-    candidates["estimated_adr"] = candidates["suburb"].map(adr_map)
-    candidates = candidates.loc[candidates["estimated_adr"].notna()].copy()
-    if candidates.empty:
-        return _empty_shortlist()
+    candidates["scenario_gross_yield"] = _safe_divide(
+        candidates["scenario_gross_revenue"], candidates["sale_price"]
+    )
+    condo_plausible = candidates["monthly_condo_fee"].between(50, 10_000)
+    iptu_plausible = candidates["yearly_iptu"].between(100, 50_000)
+    candidates["cost_data_status"] = np.where(
+        condo_plausible & iptu_plausible,
+        "Informados; validar",
+        "Ausentes ou implausíveis",
+    )
+    candidates["price_data_status"] = np.where(
+        candidates["sale_price"] < winner["asking_price_q25"],
+        "Abaixo da faixa típica; verificar",
+        "Dentro da faixa típica",
+    )
+    title_text = candidates["listing_title"].map(_ascii_lower)
+    ready_signal = title_text.str.contains("pronto|mobiliado")
+    construction_signal = title_text.str.contains("lancamento|obra|parcelad|entrega")
+    candidates["readiness_status"] = np.select(
+        [ready_signal, construction_signal],
+        ["Indício de pronto; validar", "Possível lançamento; validar"],
+        default="Estágio não informado",
+    )
+    candidates["diligence_status"] = "ELEGÍVEL PARA DILIGÊNCIA"
+    candidates["_cost_priority"] = (condo_plausible & iptu_plausible).astype(int)
+    candidates["_ready_priority"] = ready_signal.astype(int)
 
-    candidates["negotiated_purchase_price"] = candidates["sale_price"] * (
-        1 - assumptions.negotiation_discount_rate
-    )
-    candidates["annual_gross_revenue"] = (
-        candidates["estimated_adr"]
-        * assumptions.days_per_year
-        * (1 - assumptions.vacancy_rate)
-    )
-    candidates["property_costs_complete"] = (
-        candidates[["monthly_condo_fee", "yearly_iptu"]].notna().all(axis=1)
-    )
-    candidates["known_annual_property_costs"] = candidates["monthly_condo_fee"].fillna(
-        0
-    ) * 12 + candidates["yearly_iptu"].fillna(0)
-    candidates["estimated_annual_noi"] = (
-        candidates["annual_gross_revenue"] * (1 - assumptions.management_fee_rate)
-        - candidates["known_annual_property_costs"]
-    )
-    candidates["estimated_net_cap_rate"] = _safe_divide(
-        candidates["estimated_annual_noi"],
-        candidates["negotiated_purchase_price"],
-    )
-    candidates["asking_price_per_sqm"] = (
-        candidates["sale_price"] / candidates["usable_area"]
-    )
     output_columns = [
         "listing_id",
         "listing_title",
@@ -461,41 +651,67 @@ def build_acquisition_shortlist(
         "usable_area",
         "parking_spaces",
         "sale_price",
-        "negotiated_purchase_price",
         "asking_price_per_sqm",
-        "estimated_adr",
-        "annual_gross_revenue",
-        "known_annual_property_costs",
-        "property_costs_complete",
-        "estimated_annual_noi",
-        "estimated_net_cap_rate",
+        "scenario_gross_revenue",
+        "scenario_gross_yield",
+        "cost_data_status",
+        "price_data_status",
+        "readiness_status",
+        "diligence_status",
     ]
     return (
         candidates.sort_values(
-            ["estimated_net_cap_rate", "sale_price"],
-            ascending=[False, True],
+            ["_ready_priority", "_cost_priority", "sale_price"],
+            ascending=[False, False, True],
         )
         .head(limit)[output_columns]
         .reset_index(drop=True)
     )
 
 
+def build_data_audit(datasets: Mapping[str, pd.DataFrame]) -> dict[str, object]:
+    """Expose the main coverage facts used by the skeptical audit."""
+
+    frames = normalize_datasets(datasets)
+    price_ids = set(frames["prices"]["airbnb_listing_id"].dropna())
+    detail_ids = set(frames["details"]["airbnb_listing_id"].dropna())
+    matched_ids = price_ids & detail_ids
+    pair_counts = frames["prices"].groupby(
+        ["airbnb_listing_id", "date"], dropna=False
+    ).size()
+    return {
+        "airbnb_listings": len(detail_ids),
+        "priced_airbnb_listings": len(matched_ids),
+        "price_coverage": len(matched_ids) / len(detail_ids),
+        "price_rows": len(frames["prices"]),
+        "unique_listing_stay_dates": len(pair_counts),
+        "repeated_listing_stay_dates": int((pair_counts > 1).sum()),
+        "stay_date_min": frames["prices"]["date"].min(),
+        "stay_date_max": frames["prices"]["date"].max(),
+        "sale_offers_raw": len(datasets["vivareal"]),
+        "sale_offers_clean": len(prepare_sale_listings(datasets)),
+    }
+
+
 def build_decision_data(
     data_dir: str | Path,
-    assumptions: InvestmentAssumptions | None = None,
+    assumptions: DecisionAssumptions | None = None,
 ) -> dict[str, object]:
-    """Convenience entry point consumed by the Streamlit application."""
+    """Build every deterministic artifact consumed by the interface."""
 
-    assumptions = assumptions or InvestmentAssumptions()
+    assumptions = assumptions or DecisionAssumptions()
     datasets = load_datasets(data_dir)
     metrics = build_market_segments(datasets, assumptions)
-    sensitivity = run_sensitivity_analysis(metrics)
-    shortlist = build_acquisition_shortlist(datasets, metrics, assumptions)
+    robustness = run_robustness_checks(datasets, assumptions)
+    decision = build_decision(metrics, assumptions, robustness)
+    shortlist = build_acquisition_shortlist(datasets, decision, assumptions)
     return {
         "assumptions": assumptions,
         "metrics": metrics,
-        "sensitivity": sensitivity,
+        "robustness": robustness,
+        "decision": decision,
         "shortlist": shortlist,
+        "audit": build_data_audit(datasets),
     }
 
 
@@ -507,16 +723,11 @@ def _keep_latest(frame: pd.DataFrame, key: str, date_column: str) -> pd.DataFram
     )
 
 
-def _to_nullable_boolean(series: pd.Series) -> pd.Series:
-    values = series.astype("string").str.lower().str.strip()
-    return values.map({"true": True, "false": False}).astype("boolean")
-
-
 def _ascii_lower(value: object) -> str:
     if pd.isna(value):
         return ""
     text = unicodedata.normalize("NFKD", str(value))
-    return "".join(char for char in text if not unicodedata.combining(char)).lower()
+    return "".join(char for char in text if not unicodedata.combining(char)).lower().strip()
 
 
 def _normalize_suburb(value: object) -> str | None:
@@ -528,11 +739,29 @@ def _normalize_suburb(value: object) -> str | None:
         "meia praia": "Meia Praia",
         "meia praia - frente mar": "Meia Praia",
         "morretes": "Morretes",
+        "jardim praia mar": "Jardim Praiamar",
+        "jardim praiamar": "Jardim Praiamar",
         "taboleiro": "Tabuleiro dos Oliveiras",
         "tabuleiro": "Tabuleiro dos Oliveiras",
         "tabuleiro dos oliveiras": "Tabuleiro dos Oliveiras",
     }
     return aliases.get(text, text.title())
+
+
+def _suburb_from_url(value: object) -> str | None:
+    text = _ascii_lower(value).replace("_", "-")
+    aliases = {
+        "meia-praia": "Meia Praia",
+        "morretes": "Morretes",
+        "centro": "Centro",
+        "tabuleiro-dos-oliveiras": "Tabuleiro dos Oliveiras",
+        "jardim-praiamar": "Jardim Praiamar",
+        "alto-sao-bento": "Alto Sao Bento",
+    }
+    for slug, suburb in aliases.items():
+        if f"-{slug}-bairros-" in text:
+            return suburb
+    return None
 
 
 def _bedroom_profile(bedrooms: float) -> str:
@@ -562,6 +791,10 @@ def _select_segment(
     return selected.iloc[0]
 
 
+def _segment_key(segment: pd.Series) -> str:
+    return f"{segment['suburb']} · {segment['profile']}"
+
+
 def _empty_shortlist() -> pd.DataFrame:
     return pd.DataFrame(
         columns=[
@@ -573,13 +806,12 @@ def _empty_shortlist() -> pd.DataFrame:
             "usable_area",
             "parking_spaces",
             "sale_price",
-            "negotiated_purchase_price",
             "asking_price_per_sqm",
-            "estimated_adr",
-            "annual_gross_revenue",
-            "known_annual_property_costs",
-            "property_costs_complete",
-            "estimated_annual_noi",
-            "estimated_net_cap_rate",
+            "scenario_gross_revenue",
+            "scenario_gross_yield",
+            "cost_data_status",
+            "price_data_status",
+            "readiness_status",
+            "diligence_status",
         ]
     )

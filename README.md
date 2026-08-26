@@ -1,353 +1,189 @@
 > **Vídeo de apresentação:** link a adicionar antes da entrega final.
 
-# Seazone Investment Decision Engine
+# Quebre a Tese
 
-### Mesa de Convicção para investimento imobiliário em short-stay
+Uma experiência de decisão para testar a hipótese de investimento da Seazone em
+Itapema. Em vez de entregar outro dashboard, o produto coloca a tese interna
+contra o melhor segmento elegível, expõe cada evidência e calcula a menor
+mudança capaz de inverter o resultado.
 
-Aplicação de apoio à decisão executiva criada para o **Hackathon Jovens Talentos
-Seazone 2026**. O produto transforma os dados de Airbnb e VivaReal de Itapema
-(SC) em uma recomendação objetiva de alocação de capital, com premissas
-auditáveis, análise de sensibilidade e uma shortlist de imóveis reais.
+> **Posição:** os dados não sustentam compactos no Centro como a opção mais
+> eficiente sob o critério definido. Morretes 2Q lidera o cenário-base, mas a
+> qualidade da evidência permite diligência, não autorização automática de
+> compra.
 
-O objetivo não é construir mais um dashboard de mercado. O IDE foi desenhado
-para responder uma pergunta de investimento:
+A recomendação completa está em [`relatorio.md`](relatorio.md).
 
-> **Onde e em qual perfil de imóvel a Seazone deve alocar capital para operação
-> de short-stay em Itapema?**
+## Produto
 
-Em termos simples, a Mesa de Convicção cruza o valor de compra de um imóvel com
-seu potencial de receita em hospedagens de curta duração. O resultado mostra
-qual estratégia oferece a melhor relação entre capital investido, retorno e
-risco, além de indicar imóveis que podem ser avaliados pela equipe de aquisição.
+A aplicação conduz uma deliberação em seis atos:
 
-## Veredito executivo
+1. Confronta a tese interna com o melhor desafiante elegível.
+2. Separa fatos observados, cálculos e premissas.
+3. Exibe peças de evidência rastreáveis.
+4. Procura o menor choque que derruba o vencedor.
+5. Mantém objeções abertas antes do aporte.
+6. Converte o resultado em Buy Box e fila de diligência.
 
-### Tese de compactos e studios no Centro: refutada
+O botão **Tentar quebrar a recomendação** é o centro da experiência. O cálculo
+não usa IA: ele encontra a menor variação isolada de tarifa ou preço necessária
+para levar a decisão ao empate.
 
-A recomendação é priorizar **apartamentos de 2 quartos, entre 60 e 85 m²**, em
-vez de concentrar capital em studios ou unidades de 1 quarto no Centro.
+## Resultado Reproduzível
 
-| Estratégia | Papel na alocação | Leitura executiva |
-|---|---|---|
-| **Morretes, 2Q** | Retorno | Maior yield percentual e menor ticket de entrada |
-| **Centro, 2Q** | Equilíbrio | Combinação de demanda, satisfação dos hóspedes e liquidez |
-| **Meia Praia, 2Q** | Escala | Maior volume de mercado e potencial de receita absoluta, com m² mais caro |
+Com a premissa ilustrativa de 62,5% de ocupação anual comum aos segmentos:
 
-O perfil recomendado acomoda de 4 a 6 hóspedes e deve, preferencialmente,
-oferecer vaga de garagem, ar-condicionado e reserva instantânea. Esses atributos
-estão presentes no motor como evidências operacionais, e não como pontuações
-arbitrárias geradas por IA.
+| Evidência | Centro Studio/1Q | Morretes 2Q |
+|---|---:|---:|
+| Tarifa típica anunciada | R$ 445 | R$ 464 |
+| Preço pedido típico | R$ 890 mil | R$ 790 mil |
+| Receita bruta anualizada de cenário | R$ 101.516 | R$ 105.850 |
+| Retorno bruto de cenário | 11,4% | 13,4% |
+| Anúncios de short stay precificados | 78 | 51 |
+| Ofertas de venda válidas | 19 | 892 |
 
-### O que essa decisão significa
+O resultado aponta o mesmo vencedor nos três tratamentos elegíveis; um quarto
+tratamento fica inconclusivo porque deixa a tese abaixo do corte amostral. A cobertura de preços também é desigual: 66,1%
+para Centro Studio/1Q e 22,3% para Morretes 2Q. Por isso, a força da evidência é
+classificada como **limitada**.
 
-- **Não comprar apenas pelo endereço:** um bairro valorizado pode gerar boa
-  receita, mas ainda entregar retorno insuficiente diante do preço de compra.
-- **Priorizar eficiência do capital:** Morretes permite acessar o mercado com
-  menor investimento e maior retorno percentual.
-- **Preservar opções estratégicas:** Centro continua relevante quando
-  previsibilidade, experiência do hóspede e facilidade de saída pesam mais que o
-  yield isolado.
-- **Usar Meia Praia para escala:** a região é adequada quando o objetivo é
-  volume de receita e liquidez, desde que o preço do imóvel seja disciplinado.
+### Ponto de reversão
 
-## Como o produto apoia decisões reais
+Morretes 2Q deixa de liderar se, isoladamente:
 
-### Comitê de investimento
+- sua tarifa típica cair aproximadamente 14,9%;
+- sua ocupação ficar cerca de 9,3 pontos percentuais abaixo do cenário comum;
+- seu preço pedido típico superar aproximadamente R$ 928 mil;
+- compactos no Centro forem adquiridos por aproximadamente R$ 758 mil ou menos.
 
-Antes de aprovar uma compra, o comitê compara retorno projetado, custo de
-oportunidade e qualidade da evidência. A Mesa apresenta um veredito direto e
-mostra quais premissas fariam a decisão mudar.
+Esses valores representam empate entre os dois perfis, não uma promessa de
+retorno.
 
-### Time de aquisição
+## Contrato Da Decisão
 
-O time recebe uma lista curta de imóveis compatíveis com a estratégia, em vez
-de pesquisar milhares de anúncios. Cada opção mantém preço, área, localização,
-custos conhecidos e link para validação comercial.
+O motor procura o maior retorno bruto de cenário entre segmentos que tenham:
 
-### Liderança de operações
-
-A equipe pode alterar vacância e taxa de gestão para entender como uma operação
-mais ou menos eficiente afeta o retorno esperado antes de assumir o ativo.
-
-### Auditoria de risco
-
-O produto evidencia baixa amostragem, sazonalidade, custos ausentes e distância
-entre preço anunciado e preço efetivamente negociado. A IA transforma essas
-limitações em um parecer legível, sem modificar os números.
-
-## Como interpretar os indicadores
-
-Não é necessário conhecimento financeiro para acompanhar a recomendação:
-
-| Indicador | Em linguagem simples | Por que importa |
-|---|---|---|
-| **ADR** | Valor típico cobrado por uma diária | Indica o potencial de receita do imóvel |
-| **Vacância** | Parcela do ano em que o imóvel fica sem hóspedes | Evita projetar ocupação irreal de 100% |
-| **Receita bruta** | Diárias esperadas antes dos custos | Mostra a capacidade de faturamento |
-| **NOI** | Receita após gestão e custos imobiliários conhecidos | Aproxima o caixa operacional produzido pelo ativo |
-| **Yield / Cap Rate** | Retorno anual dividido pelo valor investido | Permite comparar imóveis de preços diferentes |
-| **WACC** | Retorno mínimo exigido para compensar o capital aplicado | Indica se o investimento cria valor suficiente |
-| **Ponto de invalidação** | Limite de preço ou premissa que altera a recomendação | Mostra quando a tese deixa de ser válida |
-
-## Princípios do produto
-
-- **Números determinísticos:** ADR, receita, yield, cap rate, medianas e
-  sensibilidade são calculados exclusivamente em Python com Pandas e NumPy.
-- **Premissas explícitas:** nenhuma taxa operacional fica escondida na interface
-  ou nos cálculos.
-- **IA sem autonomia numérica:** a LLM interpreta resultados já calculados e
-  atua como auditora cética; ela não cria métricas nem completa dados ausentes.
-- **Decisão antes de visualização:** cada gráfico deve sustentar uma escolha de
-  capital, não apenas descrever o mercado.
-- **Rastreabilidade:** os imóveis recomendados mantêm o identificador e o link
-  do anúncio original no VivaReal.
-
-## Jornada da aplicação
-
-A experiência está organizada como um memorando de decisão em cinco etapas:
-
-1. **Contexto:** qual decisão precisa ser tomada e sob quais premissas.
-2. **Sinais encontrados:** evidências que sustentam ou enfraquecem cada tese.
-3. **Risco e invalidação:** fragilidades e condições que mudariam a escolha.
-4. **Recomendação final:** ação proposta, exceções e o que não fazer.
-5. **Próxima ação:** imóveis reais que devem seguir para diligência.
-
-A interface evita métricas isoladas e gráficos decorativos. Cada número aparece
-junto de sua implicação para o negócio, e o único gráfico responde diretamente
-quando a preferência entre Centro e Morretes se altera.
-
-## Metodologia
-
-### Granularidade e joins
-
-O preço do Airbnb possui várias observações por anúncio. Para impedir que um
-listing com mais datas tenha peso maior no resultado, o motor calcula primeiro
-a mediana de diária de cada imóvel e somente depois a mediana do segmento.
+- apenas apartamentos, para manter comparabilidade entre as fontes;
+- bairro e perfil de quartos presentes no Airbnb e no VivaReal;
+- ao menos 20 anúncios de short stay com tarifa;
+- ao menos 15 ofertas de venda válidas.
 
 ```text
-Price_AV ── aggregate by airbnb_listing_id ──┐
-                                             ├── mercado de short-stay
-Details ── airbnb_listing_id ── Mesh ────────┘
+Receita bruta anualizada de cenário
+    = tarifa anunciada mediana × 365 × ocupação assumida
 
-VivaReal ── listing_id ── mercado de aquisição
+Retorno bruto de cenário
+    = receita bruta anualizada de cenário / preço pedido mediano
 ```
 
-- `Details` e `Mesh` possuem relação 1:1 por `airbnb_listing_id`.
-- `Price_AV` possui relação N:1 com o anúncio do Airbnb.
-- Snapshots repetidos de hosts e imóveis à venda são reduzidos ao registro mais
-  recente.
-- Bairros, booleanos, datas, identificadores e colunas numéricas são
-  normalizados antes dos cálculos.
+A ocupação é uma premissa ajustável. Como é aplicada igualmente aos segmentos,
+ela altera o nível do retorno, mas não cria artificialmente um vencedor. A
+aplicação calcula separadamente qual diferença de ocupação mudaria a escolha.
 
-### Fórmulas
+## Tratamento Dos Dados
 
-Para um segmento de bairro e tipologia:
+- IDs são carregados como texto para preservar os identificadores de 19 dígitos.
+- `Details` e `Mesh` são unidos 1:1 por `airbnb_listing_id`.
+- Preços repetidos para o mesmo anúncio e data de estadia são snapshots; o
+  cenário-base mantém a captura mais recente.
+- Cada anúncio recebe primeiro sua tarifa mediana; depois é calculada a mediana
+  do segmento, evitando peso maior para listings com mais datas.
+- O lado Airbnb é restrito a apartamentos, assim como o mercado de aquisição.
+- Ofertas do VivaReal são deduplicadas por ID e por assinatura de conteúdo;
+  preços até R$ 1 mil dentro da mesma assinatura são tratados como republicação.
+- Áreas de 15 a 500 m², preços de R$ 100 mil a R$ 20 milhões e preço por m² de
+  R$ 3 mil a R$ 50 mil formam limites amplos contra erros evidentes de unidade.
+- Divergências entre bairro informado e bairro identificável na URL são testadas
+  como cenário de robustez e excluídas da shortlist.
+- Condomínio e IPTU não entram no ranking quando ausentes. A ausência vira uma
+  pendência de diligência, nunca custo zero vantajoso.
 
-```text
-ADR do segmento = mediana das ADRs medianas de cada listing
-Noites ocupadas = 365 × (1 - vacância)
-Receita bruta anual = ADR × noites ocupadas
-NOI antes de custos do imóvel = receita bruta × (1 - taxa de gestão)
-Yield líquido sobre pedido = NOI / preço pedido
-Preço negociado = preço pedido × (1 - desconto de negociação)
-Yield líquido negociado = NOI / preço negociado
-Spread sobre WACC = yield líquido - WACC
-```
+## Testes De Robustez
 
-Na shortlist, condomínio e IPTU conhecidos são descontados do NOI. Quando um
-desses campos não está disponível, o valor ausente não é estimado: o cálculo
-considera zero e marca `property_costs_complete = False` para tornar a limitação
-visível ao decisor.
+O mesmo duelo é recalculado com:
 
-### Premissas padrão
+- captura mais recente de cada diária;
+- primeira captura de cada diária;
+- ofertas do VivaReal sem deduplicação adicional de conteúdo;
+- somente ofertas cujo bairro não conflita com a URL.
 
-| Premissa | Valor padrão | Uso |
-|---|---:|---|
-| Taxa de gestão Seazone | 20,0% | Dedução sobre a receita bruta |
-| WACC / custo de oportunidade | 10,0% a.a. | Taxa mínima de atratividade |
-| Desconto de negociação | 5,0% | Conversão do preço pedido em preço estimado de compra |
-| Vacância projetada | 37,5% | Conversão de 365 dias em noites ocupadas |
+Os resultados completos estão em [`outputs/robustez.csv`](outputs/robustez.csv).
 
-As premissas são imutáveis durante cada execução e validadas pela classe
-`InvestmentAssumptions`.
+## Fontes E Limitações
 
-## Sensibilidade e ponto de invalidação
+O dataset permite observar oferta e preço anunciado, não desempenho realizado:
 
-O motor mantém o yield do competidor constante e varia o preço de aquisição do
-segmento analisado. O ponto de equilíbrio indica quanto esse preço pode subir ou
-precisa cair para igualar o retorno do concorrente.
+- somente 999 dos 4.441 anúncios Airbnb têm preços vinculáveis, cobertura de
+  22,5%;
+- as tarifas cobrem 105 dias, de 06/01/2025 a 20/04/2025;
+- ausência de uma diária não prova reserva;
+- não há ocupação, receita realizada ou duração das estadias;
+- o VivaReal contém preço pedido, não preço transacionado;
+- não existe ligação imóvel a imóvel entre Airbnb e VivaReal;
+- custos, estágio da obra e restrições condominiais são incompletos.
 
-Um crossover negativo não é mascarado: ele significa que o bairro analisado já
-possui retorno inferior no cenário-base. Assim, uma preferência pelo Centro
-deve ser justificada por liquidez, consistência de demanda ou qualidade da
-experiência, e não por superioridade de yield.
-
-## Shortlist de aquisição
-
-Por padrão, um imóvel elegível deve atender aos seguintes critérios:
-
-- apartamento de 2 quartos;
-- localização no Centro ou em Morretes;
-- área útil entre 60 e 85 m²;
-- preço pedido de até R$ 950 mil;
-- ADR estimada a partir do segmento equivalente no Airbnb.
-
-Os candidatos são ordenados pelo cap rate líquido estimado sobre o preço
-negociado. A tabela final preserva preço, área, bairro, vagas, custos conhecidos,
-completude dos custos e URL do anúncio.
-
-## Dados
-
-Os arquivos são um snapshot estático do mercado de Itapema fornecido pela
-Seazone para o desafio.
-
-| Arquivo | Conteúdo | Chave principal |
-|---|---|---|
-| `Details_Itapema.csv` | Características e avaliações dos anúncios Airbnb | `airbnb_listing_id` |
-| `Price_AV_Itapema.csv` | Diárias por anúncio, data de estadia e captura | `airbnb_listing_id` |
-| `Hosts_ids_Itapema.csv` | Histórico e atributos dos anfitriões | `owner_id` |
-| `Mesh_Ids_Data_Itapema.csv` | Coordenadas e bairro dos anúncios | `airbnb_listing_id` |
-| `VivaReal_Itapema.csv` | Imóveis à venda e respectivos custos | `listing_id` |
-
-Fonte oficial: [dataset do Hackathon Jovens Talentos 2026](https://github.com/mateuxcv/jovens-talentos-2026-hackathon-data).
+Por isso, “retorno bruto de cenário” não é chamado de NOI, cap rate líquido ou
+retorno realizado.
 
 ## Arquitetura
 
 ```text
-.
-├── data/                    # CSVs originais do desafio
-├── src/
-│   ├── __init__.py
-│   ├── ai_client.py         # Cliente HTTP direto para a LLM
-│   ├── engine.py            # Contrato de dados e regras determinísticas
-│   └── prompts.py           # Limites e instruções do auditor cético
-├── ai-log/                  # Histórico textual das interações com IA
-├── app.py                   # Mesa de Convicção em Streamlit
-├── index.html               # Enunciado original do desafio
-├── README.md
-└── requirements.txt
+data/                       CSVs originais
+src/engine.py               limpeza, regras, decisão e stress test
+scripts/export_evidence.py  exportação dos artefatos reproduzíveis
+outputs/                    decisão, segmentos, robustez e shortlist
+tests/test_engine.py        testes do contrato e das fórmulas
+app.py                      experiência guiada em Streamlit
+relatorio.md                recomendação final escrita
+ai-log/                     export integral das conversas com IA
 ```
 
-### API do motor
+Nenhum framework multiagente é utilizado. A IA ajudou a formular hipóteses,
+criticar inferências e estruturar a comunicação; os números e o veredito são
+produzidos por regras Python testáveis.
 
-| Função | Responsabilidade |
-|---|---|
-| `load_datasets` | Carregar e validar os cinco schemas oficiais |
-| `normalize_datasets` | Padronizar tipos, bairros e snapshots sem alterar os dados brutos |
-| `build_market_segments` | Consolidar Airbnb e VivaReal por bairro e perfil |
-| `calculate_investment_metrics` | Calcular receita, yields e spreads sobre WACC |
-| `run_sensitivity_analysis` | Encontrar o crossover de retorno entre estratégias |
-| `build_acquisition_shortlist` | Filtrar e ordenar imóveis reais para aquisição |
-| `build_decision_data` | Entregar todos os dados necessários para a interface |
+## Como Executar
 
-## Tecnologias e seus casos de uso
-
-A tecnologia é deliberadamente simples. Cada ferramenta resolve uma necessidade
-concreta do produto e pode ser substituída sem alterar a tese de investimento.
-
-| Tecnologia | Uso no projeto | Exemplo para quem utiliza o produto |
-|---|---|---|
-| **Python** | Organiza as regras de negócio e o fluxo dos cálculos | Recalcular toda a recomendação quando uma premissa muda |
-| **Pandas** | Limpa, conecta e resume os dados de Airbnb e VivaReal | Comparar a diária típica e o preço de compra por bairro |
-| **NumPy** | Executa variações numéricas de forma consistente | Simular diferentes preços para encontrar o ponto de invalidação |
-| **Streamlit** | Transforma os resultados em uma aplicação web interativa | Permitir que um executivo altere a vacância sem editar código |
-| **Plotly** | Exibe gráficos interativos de decisão | Visualizar em que cenário Centro e Morretes trocam de posição |
-| **LLM via API** | Redige a síntese executiva e questiona fragilidades | Produzir um parecer de risco usando apenas números calculados pelo motor |
-
-Não são utilizados frameworks complexos de agentes. A camada de IA é pequena e
-controlada para preservar rastreabilidade, velocidade de desenvolvimento e
-confiança na recomendação.
-
-## Como executar
-
-### Requisitos
-
-- Python 3.10 ou superior
-- `pip`
-
-### Instalação
+Requisitos: Python 3.10 ou superior e `pip`.
 
 ```bash
-git clone https://github.com/mateuxcv/jovens-talentos-2026-hackathon-data.git
-cd jovens-talentos-2026-hackathon-data
+git clone https://github.com/mateuxcv/jt2026-mateus-victor.git
+cd jt2026-mateus-victor
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### Executar o motor
-
-```bash
-python - <<'PY'
-from src.engine import build_decision_data
-
-decision = build_decision_data("data")
-print(decision["metrics"].to_string(index=False))
-print(decision["shortlist"].to_string(index=False))
-print(decision["sensitivity"].attrs)
-PY
-```
-
-### Executar a interface
-
-```bash
 streamlit run app.py
 ```
 
-O navegador abrirá a Mesa de Convicção em `http://localhost:8501`. Os controles
-da barra lateral recalculam métricas, sensibilidade e shortlist automaticamente.
+A aplicação abrirá em `http://localhost:8501`.
 
-### Ativar o auditor com IA
-
-A aplicação funciona integralmente sem uma chave de IA. Para habilitar o parecer
-do auditor cético, configure uma API compatível com Chat Completions:
+### Regerar Evidências
 
 ```bash
-export LLM_API_KEY="sua-chave"
-export LLM_MODEL="gpt-4o-mini"
-export LLM_API_URL="https://api.openai.com/v1/chat/completions"
-streamlit run app.py
+python scripts/export_evidence.py
 ```
 
-`LLM_MODEL` e `LLM_API_URL` são opcionais. Cada parecer gerado é registrado em
-`ai-log/` junto às evidências determinísticas enviadas ao modelo. A chave nunca é
-incluída no arquivo de auditoria.
+### Executar Testes
 
-## Governança da IA
+```bash
+python -m unittest discover -v
+```
 
-A camada de IA recebe somente um payload estruturado produzido por
-`engine.py`. Seu escopo é limitado a:
+## Artefatos Gerados
 
-- sintetizar o parecer executivo;
-- confrontar a tese com os resultados calculados;
-- apontar riscos de amostragem, sazonalidade e qualidade dos dados;
-- explicar por que uma recomendação muda em determinado cenário.
+- [`outputs/decisao.json`](outputs/decisao.json): contrato, tese, desafiante e
+  condições de reversão.
+- [`outputs/segmentos.csv`](outputs/segmentos.csv): métricas de todos os
+  segmentos.
+- [`outputs/robustez.csv`](outputs/robustez.csv): tratamentos alternativos.
+- [`outputs/shortlist.csv`](outputs/shortlist.csv): anúncios para diligência.
 
-A LLM não poderá calcular ADR, receita, preço por m², yield, cap rate ou ponto de
-invalidação. O texto produzido é armazenado em `ai-log/` para auditoria.
+## Antes Da Entrega
 
-## Limitações conhecidas
-
-- O dataset é um snapshot e não representa atualização em tempo real.
-- Preço anunciado não é necessariamente preço efetivo de transação.
-- Disponibilidade no Airbnb não equivale diretamente a ocupação realizada.
-- Condomínio e IPTU possuem dados ausentes em parte dos anúncios.
-- Segmentos com amostras pequenas exigem interpretação cautelosa.
-- Receita projetada não contempla reformas, mobiliário, manutenção, impostos
-  operacionais ou custos extraordinários não presentes na base.
-
-## Status
-
-- [x] Contrato e validação dos cinco datasets
-- [x] Motor determinístico de métricas por segmento
-- [x] Sensibilidade Centro versus Morretes
-- [x] Shortlist rastreável de aquisição
-- [x] Interface executiva em Streamlit
-- [x] Parecer opcional do auditor cético com LLM
-- [x] Exportação automática das sessões de IA para `ai-log/`
-- [ ] Vídeo de apresentação
+- [ ] Adicionar o link público do vídeo na primeira linha.
+- [ ] Exportar esta sessão completa para `ai-log/` em texto ou JSON.
+- [ ] Confirmar repositório e vídeo em janela anônima.
 
 ## Desafio
 
-Projeto desenvolvido para o
-[Hackathon Jovens Talentos AI Builder 2026 — Seazone](https://seazone-tech.github.io/jovens-talentos-2026-hackathon-data/).
+[Hackathon Jovens Talentos AI Builder 2026](https://seazone-tech.github.io/jovens-talentos-2026-hackathon-data/)
