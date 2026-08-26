@@ -444,7 +444,7 @@ def main() -> None:
                 help="Conservadora exige 40 anúncios de short stay e 30 ofertas de venda por segmento.",
             )
             submitted = st.form_submit_button(
-                "ANALISAR OPORTUNIDADES", width="stretch"
+                "ANALISAR OPORTUNIDADES", use_container_width=True
             )
             st.caption(
                 "Dica: comece com a política Padrão. Depois refaça o mandato em "
@@ -799,7 +799,7 @@ def main() -> None:
         st.dataframe(
             source_display.head(100),
             hide_index=True,
-            width="stretch",
+            use_container_width=True,
             column_config=column_config,
         )
         st.download_button(
@@ -807,7 +807,7 @@ def main() -> None:
             data=(DATA_DIR / source_config["file"]).read_bytes(),
             file_name=source_config["file"],
             mime="text/csv",
-            width="stretch",
+            use_container_width=True,
         )
 
     _stage("04", "Gates de aprovação", "Pendências que impedem compra automática")
@@ -871,15 +871,15 @@ def main() -> None:
             st.link_button(
                 "ABRIR ANÚNCIO ORIGINAL",
                 selected["link_url"],
-                width="stretch",
+                use_container_width=True,
             )
         with action_reject:
-            if st.button("REJEITAR E VER PRÓXIMO", width="stretch"):
+            if st.button("REJEITAR E VER PRÓXIMO", use_container_width=True):
                 st.session_state["rejected_candidates"] = [*rejected, selected_id]
                 st.session_state.pop("approved_candidate", None)
                 st.rerun()
         with action_advance:
-            if st.button("AVANÇAR PARA DILIGÊNCIA", width="stretch"):
+            if st.button("AVANÇAR PARA DILIGÊNCIA", use_container_width=True):
                 st.session_state["approved_candidate"] = selected_id
 
         if st.session_state.get("approved_candidate") == selected_id:
@@ -916,16 +916,18 @@ def main() -> None:
                 data=memo,
                 file_name=f"diligencia-{selected_id}.md",
                 mime="text/markdown",
-                width="stretch",
+                use_container_width=True,
             )
 
     with st.expander("Ver auditoria técnica completa"):
         robustness_display = robustness.copy()
         robustness_display["thesis_yield"] *= 100
         robustness_display["challenger_yield"] *= 100
-        st.dataframe(robustness_display, hide_index=True, width="stretch")
+        st.dataframe(
+            robustness_display, hide_index=True, use_container_width=True
+        )
         evidence = case["metrics"].loc[case["metrics"]["evidence_eligible"]].copy()
-        st.dataframe(evidence, hide_index=True, width="stretch")
+        st.dataframe(evidence, hide_index=True, use_container_width=True)
 
     st.html(
         '<div class="footnote">Decision support, not investment authorization. IA apoiou hipótese, crítica e comunicação; nenhum número é calculado por LLM.</div>'
