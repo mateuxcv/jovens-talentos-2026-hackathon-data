@@ -16,12 +16,13 @@ A recomendação completa está em [`relatorio.md`](relatorio.md).
 
 ## Produto
 
-A aplicação funciona como um console operacional em quatro etapas:
+A aplicação funciona como um console operacional em cinco etapas:
 
 1. Mostra a próxima ação e seu impacto financeiro imediatamente.
 2. Confronta a tese interna e executa um downside test.
-3. Expõe evidências e gates que ainda bloqueiam a compra.
-4. Converte o resultado em Buy Box e fila de diligência.
+3. Expõe evidências e permite consultar ou baixar as cinco bases originais.
+4. Mostra os gates que ainda bloqueiam a compra.
+5. Converte o resultado em Buy Box e fila de diligência.
 
 O CTA principal abre o primeiro candidato da fila de diligência. O downside test
 é a ação secundária que encontra a menor variação isolada de tarifa ou preço

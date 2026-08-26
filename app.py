@@ -12,6 +12,71 @@ from src.engine import DecisionAssumptions, build_decision_data
 
 DATA_DIR = Path(__file__).parent / "data"
 
+SOURCE_VIEWS = {
+    "Anúncios do Airbnb": {
+        "file": "Details_Itapema.csv",
+        "description": "Características publicadas dos imóveis de short stay.",
+        "columns": {
+            "airbnb_listing_id": "ID do anúncio",
+            "ad_name": "Título",
+            "listing_type": "Tipo",
+            "number_of_bedrooms": "Quartos",
+            "number_of_guests": "Hóspedes",
+            "number_of_reviews": "Avaliações",
+            "star_rating": "Nota",
+            "url": "Link original",
+        },
+    },
+    "Tarifas anunciadas": {
+        "file": "Price_AV_Itapema.csv",
+        "description": "Preço anunciado por imóvel, data de estadia e captura.",
+        "columns": {
+            "airbnb_listing_id": "ID do anúncio",
+            "date": "Data da estadia",
+            "price": "Tarifa anunciada",
+            "aquisition_date": "Data da captura",
+        },
+    },
+    "Localização": {
+        "file": "Mesh_Ids_Data_Itapema.csv",
+        "description": "Bairro e coordenadas associados aos anúncios do Airbnb.",
+        "columns": {
+            "airbnb_listing_id": "ID do anúncio",
+            "suburb": "Bairro",
+            "latitude": "Latitude",
+            "longitude": "Longitude",
+            "city": "Cidade",
+        },
+    },
+    "Anfitriões": {
+        "file": "Hosts_ids_Itapema.csv",
+        "description": "Experiência, avaliações e atributos dos anfitriões.",
+        "columns": {
+            "owner_id": "ID do anfitrião",
+            "owner": "Anfitrião",
+            "is_superhost": "Superhost",
+            "number_of_reviews_host": "Avaliações",
+            "star_rating_host": "Nota",
+            "years_host": "Anos como host",
+        },
+    },
+    "Imóveis à venda": {
+        "file": "VivaReal_Itapema.csv",
+        "description": "Ofertas de aquisição publicadas no VivaReal.",
+        "columns": {
+            "listing_id": "ID do anúncio",
+            "listing_title": "Imóvel",
+            "suburb": "Bairro informado",
+            "bedrooms": "Quartos",
+            "usable_area": "Área útil",
+            "sale_price": "Preço pedido",
+            "monthly_condo_fee": "Condomínio mensal",
+            "yearly_iptu": "IPTU anual",
+            "link_url": "Link original",
+        },
+    },
+}
+
 st.set_page_config(
     page_title="Investment OS | Itapema",
     page_icon="▰",
@@ -21,7 +86,7 @@ st.set_page_config(
 
 
 def _inject_styles() -> None:
-    st.markdown(
+    st.html(
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -161,8 +226,7 @@ def _inject_styles() -> None:
             .approval-status { border-right:0; border-bottom:1px solid rgba(255,255,255,.2); }
         }
         </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -171,6 +235,15 @@ def _build_case(occupancy_rate: float) -> dict[str, object]:
     return build_decision_data(
         DATA_DIR, DecisionAssumptions(occupancy_rate=occupancy_rate)
     )
+
+
+@st.cache_data(show_spinner=False)
+def _load_source(filename: str) -> pd.DataFrame:
+    frame = pd.read_csv(DATA_DIR / filename, na_values=["<NA>"], low_memory=False)
+    for column in ("airbnb_listing_id", "listing_id", "owner_id"):
+        if column in frame:
+            frame[column] = frame[column].astype("string")
+    return frame
 
 
 def _money(value: float, compact: bool = False) -> str:
@@ -194,14 +267,13 @@ def _segment_name(segment: pd.Series) -> str:
 
 
 def _stage(number: str, title: str, subtitle: str) -> None:
-    st.markdown(
+    st.html(
         f"""
         <div class="stage-head">
           <div class="stage-index">{escape(number)}</div>
           <div class="stage-copy"><strong>{escape(title)}</strong><span>{escape(subtitle)}</span></div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -284,7 +356,7 @@ def main() -> None:
         else ""
     )
 
-    st.markdown(
+    st.html(
         f"""
         <div class="topbar">
           <div class="topbar-brand"><span class="topbar-mark"></span><span>Seazone Investment OS</span></div>
@@ -304,12 +376,11 @@ def main() -> None:
             <div class="value-row"><span>Walk-away price do segmento</span><strong>{_money(reversal['winner_max_asking_price'], True)}</strong></div>
           </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     _stage("01", "Decisão em confronto", "A hipótese interna não recebe tratamento preferencial")
-    st.markdown(
+    st.html(
         f"""
         <div class="compare-shell">
           <div class="compare-head"><span>Métrica de decisão</span><span>Hipótese · {escape(thesis_name)}</span><span class="selected">Selecionado · {escape(challenger_name)}</span></div>
@@ -320,17 +391,16 @@ def main() -> None:
           <div class="compare-row"><span>Evidência short stay + venda</span><strong>{int(thesis['short_stay_listings'])} + {int(thesis['sale_listings'])}</strong><strong>{int(challenger['short_stay_listings'])} + {int(challenger['sale_listings'])}</strong></div>
         </div>
         <div class="action-prompt"><strong>Por que agir:</strong> o desafiante exige {_money(abs(capital_gap), True)} menos capital pedido mediano e projeta {_money(max(revenue_gap, 0))} a mais sob a ocupação assumida. Antes de avançar, tente destruir essa vantagem.</div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    st.markdown('<div id="downside"></div>', unsafe_allow_html=True)
+    st.html('<div id="downside"></div>')
     if st.button("EXECUTAR DOWNSIDE TEST"):
         st.session_state["reveal_attack"] = True
 
     if st.session_state.get("reveal_attack", False):
         minimum = reversal["minimum_attack"]
-        st.markdown(
+        st.html(
             f"""
             <div class="break-result">
               <div class="break-kicker">Menor choque que elimina a liderança</div>
@@ -344,8 +414,7 @@ def main() -> None:
                 <div class="break-cell"><span>Preço pedido limite</span><strong>{_money(reversal['winner_max_asking_price'], True)}</strong></div>
               </div>
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
     _stage("02", "Trilha de evidências", "Promessa proporcional à prova disponível")
@@ -381,11 +450,46 @@ def main() -> None:
             ),
         ]
     )
-    st.markdown(
-        f'<div class="evidence-ledger">{evidence_html}</div>', unsafe_allow_html=True
+    st.html(f'<div class="evidence-ledger">{evidence_html}</div>')
+
+    _stage("03", "Dados originais", "Veja a fonte antes de aceitar a síntese")
+    source_name = st.selectbox(
+        "Escolha uma base para consultar",
+        options=list(SOURCE_VIEWS),
+        index=0,
+    )
+    source_config = SOURCE_VIEWS[source_name]
+    source_frame = _load_source(source_config["file"])
+    source_columns = {
+        column: label
+        for column, label in source_config["columns"].items()
+        if column in source_frame
+    }
+    source_display = source_frame[list(source_columns)].rename(columns=source_columns)
+    st.caption(
+        f"{source_config['description']} {len(source_frame):,} registros no arquivo; "
+        "os primeiros 100 aparecem abaixo."
+    )
+    column_config: dict[str, object] = {}
+    if "Link original" in source_display:
+        column_config["Link original"] = st.column_config.LinkColumn(
+            "Link original", display_text="Abrir"
+        )
+    st.dataframe(
+        source_display.head(100),
+        hide_index=True,
+        width="stretch",
+        column_config=column_config,
+    )
+    st.download_button(
+        f"BAIXAR {source_config['file']}",
+        data=(DATA_DIR / source_config["file"]).read_bytes(),
+        file_name=source_config["file"],
+        mime="text/csv",
+        width="stretch",
     )
 
-    _stage("03", "Gates de aprovação", "O que bloqueia uma ordem de compra hoje")
+    _stage("04", "Gates de aprovação", "O que bloqueia uma ordem de compra hoje")
     gates_html = "".join(
         [
             _gate(
@@ -418,19 +522,18 @@ def main() -> None:
             ),
         ]
     )
-    st.markdown(f'<div class="gate-list">{gates_html}</div>', unsafe_allow_html=True)
-    st.markdown(
+    st.html(f'<div class="gate-list">{gates_html}</div>')
+    st.html(
         f"""
         <div class="approval-bar">
           <div class="approval-status"><span>Status do comitê</span><strong>Diligenciar, não comprar</strong></div>
           <div class="approval-next"><strong>Próxima ação</strong>Validar o primeiro candidato abaixo e só avançar se os três gates críticos forem fechados sem ultrapassar {_money(reversal['winner_max_asking_price'])}.</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    st.markdown('<div id="queue"></div>', unsafe_allow_html=True)
-    _stage("04", "Fila de diligência", "Menos pesquisa, próxima ação explícita")
+    st.html('<div id="queue"></div>')
+    _stage("05", "Fila de diligência", "Menos pesquisa, próxima ação explícita")
     if shortlist.empty:
         st.warning("Nenhum anúncio atende simultaneamente à Buy Box e ao preço limite.")
     else:
@@ -447,9 +550,7 @@ def main() -> None:
                 </div>
                 """
             )
-        st.markdown(
-            f'<div class="deal-queue">{"".join(rows)}</div>', unsafe_allow_html=True
-        )
+        st.html(f'<div class="deal-queue">{"".join(rows)}</div>')
         st.caption(
             "A receita herda a tarifa típica do segmento, não uma previsão específica do imóvel. Preços muito abaixo da faixa típica são sinais de verificação, não vantagens assumidas."
         )
@@ -483,9 +584,8 @@ def main() -> None:
         ].copy()
         st.dataframe(evidence, hide_index=True, width="stretch")
 
-    st.markdown(
-        '<div class="footnote">Decision support, not investment authorization. IA apoiou hipótese, crítica e comunicação; nenhum número é calculado por LLM.</div>',
-        unsafe_allow_html=True,
+    st.html(
+        '<div class="footnote">Decision support, not investment authorization. IA apoiou hipótese, crítica e comunicação; nenhum número é calculado por LLM.</div>'
     )
 
 
